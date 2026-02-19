@@ -47,7 +47,8 @@ defmodule Jido.Lib.MixProject do
       {:jido_runic, path: "../jido_runic"},
       {:jido_action, github: "agentjido/jido_action", branch: "main", override: true},
       {:libgraph, github: "zblanco/libgraph", branch: "zw/multigraph-indexes", override: true},
-      {:jido_shell, path: "../jido_shell"},
+      {:jido_shell, path: "../jido_shell", override: true},
+      {:jido_claude, path: "../jido_claude"},
       {:jido_vfs, path: "../jido_vfs", override: true},
       {:sprites, git: "https://github.com/mikehostetler/sprites-ex.git"},
 

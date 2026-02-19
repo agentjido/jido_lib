@@ -40,7 +40,8 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.PrepareGithubAuth do
   end
 
   defp ensure_auth_status(agent_mod, session_id, timeout) do
-    auth_status_cmd = "gh auth status -h github.com >/dev/null 2>&1 || gh auth status >/dev/null 2>&1"
+    auth_status_cmd =
+      "gh auth status -h github.com >/dev/null 2>&1 || gh auth status >/dev/null 2>&1"
 
     case Helpers.run(agent_mod, session_id, auth_status_cmd, timeout: timeout) do
       {:ok, _} -> :ok

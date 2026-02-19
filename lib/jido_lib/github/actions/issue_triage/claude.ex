@@ -24,9 +24,10 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.Claude do
   require Logger
 
   alias Jido.Lib.Github.Actions.IssueTriage.Helpers
+  alias JidoClaude.CLI.Parser
+  alias JidoClaude.CLI.Runner
 
   @max_body_chars 2_000
-  @prompt_file "/tmp/jido_claude_prompt.txt"
   @signal_source "/github/issue_triage/claude_probe"
   @heartbeat_interval_ms 5_000
   @max_raw_line_chars 600
@@ -38,124 +39,88 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.Claude do
     observer_pid = params[:observer_pid]
     prompt = build_prompt(params)
 
-    write_cmd = "cat > #{@prompt_file} << 'JIDO_PROMPT_EOF'\n#{prompt}\nJIDO_PROMPT_EOF"
+    emit_probe_signal(observer_pid, "started", %{
+      run_id: params[:run_id],
+      issue_number: params[:issue_number],
+      session_id: params.session_id,
+      repo_dir: params.repo_dir
+    })
 
-    with {:ok, _} <-
-           Helpers.run_in_dir(agent_mod, params.session_id, params.repo_dir, write_cmd,
-             timeout: 10_000
-           ) do
-      cmd = claude_stream_json_command()
+    Logger.info(
+      "[Claude] Running claude stream-json mode in #{params.repo_dir} (prompt: #{byte_size(prompt)} bytes)"
+    )
 
-      emit_probe_signal(observer_pid, "started", %{
-        run_id: params[:run_id],
-        issue_number: params[:issue_number],
-        session_id: params.session_id,
-        repo_dir: params.repo_dir
-      })
+    timeout = params[:timeout] || 300_000
 
-      Logger.info(
-        "[Claude] Running claude stream-json mode in #{params.repo_dir} (prompt: #{byte_size(prompt)} bytes)"
-      )
+    case Runner.run_in_shell(params.session_id, params.repo_dir, prompt,
+           timeout: timeout,
+           shell_agent_mod: agent_mod,
+           shell_session_server_mod: session_server_mod,
+           heartbeat_interval_ms: @heartbeat_interval_ms,
+           on_mode: fn mode ->
+             emit_probe_signal(observer_pid, "mode", %{
+               mode: mode,
+               session_id: params.session_id
+             })
+           end,
+           on_event: fn event ->
+             emit_stream_event_signal(observer_pid, event, params)
+           end,
+           on_raw_line: fn raw_line ->
+             emit_raw_line_signal(observer_pid, raw_line, params)
+           end,
+           on_heartbeat: fn idle_ms ->
+             emit_probe_signal(observer_pid, "heartbeat", %{
+               run_id: params[:run_id],
+               issue_number: params[:issue_number],
+               session_id: params.session_id,
+               idle_ms: idle_ms
+             })
+           end
+         ) do
+      {:ok, result} ->
+        investigation = result.result_text
 
-      timeout = params[:timeout] || 300_000
+        emit_probe_signal(observer_pid, "completed", %{
+          run_id: params[:run_id],
+          issue_number: params[:issue_number],
+          session_id: params.session_id,
+          event_count: length(result.events),
+          investigation_bytes: byte_size(investigation || "")
+        })
 
-      case Jido.Shell.StreamJson.run(
-             agent_mod,
-             session_server_mod,
-             params.session_id,
-             params.repo_dir,
-             cmd,
-             timeout: timeout,
-             heartbeat_interval_ms: @heartbeat_interval_ms,
-             fallback_eligible?: &fallback_eligible_reason?/1,
-             on_mode: fn mode ->
-               emit_probe_signal(observer_pid, "mode", %{
-                 mode: mode,
-                 session_id: params.session_id
-               })
-             end,
-             on_event: fn event ->
-               emit_stream_event_signal(observer_pid, event, params)
-             end,
-             on_raw_line: fn raw_line ->
-               emit_raw_line_signal(observer_pid, raw_line, params)
-             end,
-             on_heartbeat: fn idle_ms ->
-               emit_probe_signal(observer_pid, "heartbeat", %{
-                 run_id: params[:run_id],
-                 issue_number: params[:issue_number],
-                 session_id: params.session_id,
-                 idle_ms: idle_ms
-               })
-             end
-           ) do
-        {:ok, output, events} ->
-          investigation = extract_investigation(output, events)
+        {:ok,
+         Map.merge(Helpers.pass_through(params), %{
+           investigation: investigation,
+           investigation_status: :ok,
+           investigation_error: nil
+         })}
 
-          emit_probe_signal(observer_pid, "completed", %{
-            run_id: params[:run_id],
-            issue_number: params[:issue_number],
-            session_id: params.session_id,
-            event_count: length(events),
-            investigation_bytes: byte_size(investigation || "")
-          })
-
-          {:ok,
-           Map.merge(Helpers.pass_through(params), %{
-             investigation: investigation,
-             investigation_status: :ok,
-             investigation_error: nil
-           })}
-
-        {:error, reason} ->
-          Logger.warning("[Claude] Failed: #{inspect(reason)}")
-
-          emit_probe_signal(observer_pid, "failed", %{
-            run_id: params[:run_id],
-            issue_number: params[:issue_number],
-            session_id: params.session_id,
-            error: inspect(reason)
-          })
-
-          {:ok,
-           Map.merge(Helpers.pass_through(params), %{
-             investigation: nil,
-             investigation_status: :failed,
-             investigation_error: inspect(reason)
-           })}
-      end
-    else
       {:error, reason} ->
+        Logger.warning("[Claude] Failed: #{inspect(reason)}")
+
         emit_probe_signal(observer_pid, "failed", %{
           run_id: params[:run_id],
           issue_number: params[:issue_number],
           session_id: params.session_id,
-          error: "prompt_write_failed=#{inspect(reason)}"
+          error: inspect(reason)
         })
 
         {:ok,
          Map.merge(Helpers.pass_through(params), %{
            investigation: nil,
            investigation_status: :failed,
-           investigation_error: "prompt_write_failed=#{inspect(reason)}"
+           investigation_error: inspect(reason)
          })}
     end
   end
-
-  defp claude_stream_json_command do
-    "claude -p --output-format stream-json --include-partial-messages --verbose \"$(cat #{@prompt_file})\""
-  end
-
-  defp fallback_eligible_reason?(:unsupported_shell_session_server), do: true
-  defp fallback_eligible_reason?(%Jido.Shell.Error{code: {:session, :not_found}}), do: true
-  defp fallback_eligible_reason?(_), do: false
 
   defp emit_stream_event_signal(observer_pid, event, params) do
     emit_probe_signal(observer_pid, "event", %{
       run_id: params[:run_id],
       issue_number: params[:issue_number],
       session_id: params[:session_id],
-      event_kind: stream_event_kind(event),
+      event_kind: Parser.event_kind(event),
       event: event
     })
   end
@@ -175,12 +140,6 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.Claude do
     |> String.slice(0, @max_raw_line_chars)
   end
 
-  defp stream_event_kind(%{"type" => "stream_event", "event" => %{"type" => nested}}),
-    do: "stream:#{nested}"
-
-  defp stream_event_kind(%{"type" => type}) when is_binary(type), do: type
-  defp stream_event_kind(_), do: "unknown"
-
   defp emit_probe_signal(pid, suffix, data)
        when is_pid(pid) and is_binary(suffix) and is_map(data) do
     signal =
@@ -197,58 +156,6 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.Claude do
   end
 
   defp emit_probe_signal(_pid, _suffix, _data), do: :ok
-
-  defp extract_investigation(raw_output, events) when is_list(events) do
-    result_text =
-      Enum.find_value(Enum.reverse(events), fn
-        %{"type" => "result", "result" => result} when is_binary(result) ->
-          String.trim(result)
-
-        _ ->
-          nil
-      end)
-
-    assistant_text =
-      Enum.find_value(Enum.reverse(events), fn
-        %{"type" => "assistant", "message" => %{"content" => content}} when is_list(content) ->
-          content
-          |> Enum.flat_map(fn
-            %{"type" => "text", "text" => text} when is_binary(text) -> [text]
-            _ -> []
-          end)
-          |> Enum.join("")
-          |> String.trim()
-          |> case do
-            "" -> nil
-            text -> text
-          end
-
-        _ ->
-          nil
-      end)
-
-    delta_text =
-      events
-      |> Enum.flat_map(fn
-        %{
-          "type" => "stream_event",
-          "event" => %{"type" => "content_block_delta", "delta" => %{"text" => text}}
-        }
-        when is_binary(text) ->
-          [text]
-
-        _ ->
-          []
-      end)
-      |> Enum.join("")
-      |> String.trim()
-      |> case do
-        "" -> nil
-        text -> text
-      end
-
-    result_text || assistant_text || delta_text || String.trim(raw_output || "")
-  end
 
   defp build_prompt(%{prompt: prompt}) when is_binary(prompt) and prompt != "", do: prompt
 

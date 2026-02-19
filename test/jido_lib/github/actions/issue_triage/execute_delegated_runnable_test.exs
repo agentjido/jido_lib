@@ -28,7 +28,14 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ExecuteDelegatedRunnableTest do
   end
 
   test "executes runnable and emits delegate started/completed signals" do
-    runnable = build_runnable(AddOne, %{value: 3, observer_pid: self(), run_id: "run-123", issue_number: 19, session_id: "sess-123"})
+    runnable =
+      build_runnable(AddOne, %{
+        value: 3,
+        observer_pid: self(),
+        run_id: "run-123",
+        issue_number: 19,
+        session_id: "sess-123"
+      })
 
     assert {:ok, %{}, directives} =
              ExecuteDelegatedRunnable.run(
@@ -52,7 +59,14 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ExecuteDelegatedRunnableTest do
   end
 
   test "emits delegate failed signal when runnable execution fails" do
-    runnable = build_runnable(FailAction, %{value: 3, observer_pid: self(), run_id: "run-123", issue_number: 19, session_id: "sess-123"})
+    runnable =
+      build_runnable(FailAction, %{
+        value: 3,
+        observer_pid: self(),
+        run_id: "run-123",
+        issue_number: 19,
+        session_id: "sess-123"
+      })
 
     assert {:ok, %{}, _directives} =
              ExecuteDelegatedRunnable.run(

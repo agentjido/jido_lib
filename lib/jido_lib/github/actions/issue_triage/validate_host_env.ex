@@ -25,12 +25,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv do
     ]
 
   alias Jido.Lib.Github.Actions.IssueTriage.Helpers
-
-  @required_auth_vars [
-    "ANTHROPIC_AUTH_TOKEN",
-    "ANTHROPIC_API_KEY",
-    "CLAUDE_CODE_API_KEY"
-  ]
+  alias JidoClaude.RuntimeConfig
 
   @forward_vars [
     "ANTHROPIC_BASE_URL",
@@ -59,8 +54,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv do
   @spec validate_host_env!() :: :ok | no_return()
   def validate_host_env! do
     require_env!("SPRITES_TOKEN", "SPRITES_TOKEN environment variable not set")
-    require_env!("ANTHROPIC_BASE_URL", "ANTHROPIC_BASE_URL environment variable not set")
-    require_any_env!(@required_auth_vars, zai_auth_error_message())
+    RuntimeConfig.validate_auth_contract!()
 
     require_any_env!(
       ["GH_TOKEN", "GITHUB_TOKEN"],
@@ -104,10 +98,6 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv do
     else
       raise message
     end
-  end
-
-  defp zai_auth_error_message do
-    "One of ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY, or CLAUDE_CODE_API_KEY must be set"
   end
 
   defp present?(value) when is_binary(value), do: String.trim(value) != ""

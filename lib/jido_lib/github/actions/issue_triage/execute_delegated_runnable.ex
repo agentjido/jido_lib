@@ -21,7 +21,8 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ExecuteDelegatedRunnable do
   @impl true
   def run(%{runnable: runnable, runnable_id: runnable_id, tag: tag}, context) do
     if runnable.id != runnable_id do
-      {:error, "Runnable ID mismatch: expected #{inspect(runnable_id)}, got #{inspect(runnable.id)}"}
+      {:error,
+       "Runnable ID mismatch: expected #{inspect(runnable_id)}, got #{inspect(runnable.id)}"}
     else
       emit_delegate_signal(observer_pid(runnable), "started", delegate_payload(runnable, tag))
 
