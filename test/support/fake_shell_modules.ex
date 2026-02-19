@@ -1,0 +1,203 @@
+defmodule Jido.Lib.Test.FakeShellState do
+  @moduledoc false
+
+  use Agent
+
+  def start_link(_opts \\ []) do
+    Agent.start(
+      fn ->
+        %{runs: [], stops: [], starts: [], failures: [], sprites: %{}, sprite_destroys: []}
+      end,
+      name: __MODULE__
+    )
+  end
+
+  def ensure_started! do
+    case Process.whereis(__MODULE__) do
+      nil ->
+        case start_link() do
+          {:ok, _pid} -> :ok
+          {:error, {:already_started, _pid}} -> :ok
+        end
+
+      _pid ->
+        :ok
+    end
+  end
+
+  def reset! do
+    ensure_started!()
+
+    Agent.update(__MODULE__, fn _ ->
+      %{runs: [], stops: [], starts: [], failures: [], sprites: %{}, sprite_destroys: []}
+    end)
+  end
+
+  def add_run(entry), do: Agent.update(__MODULE__, &%{&1 | runs: [entry | &1.runs]})
+  def add_stop(session_id), do: Agent.update(__MODULE__, &%{&1 | stops: [session_id | &1.stops]})
+  def add_start(entry), do: Agent.update(__MODULE__, &%{&1 | starts: [entry | &1.starts]})
+
+  def add_failure(match, reason) when is_binary(match) do
+    Agent.update(__MODULE__, &%{&1 | failures: [{match, reason} | &1.failures]})
+  end
+
+  def put_sprite(name) when is_binary(name) do
+    Agent.update(__MODULE__, fn state ->
+      %{state | sprites: Map.put(state.sprites, name, true)}
+    end)
+  end
+
+  def sprite_exists?(name) when is_binary(name) do
+    Agent.get(__MODULE__, fn state -> Map.get(state.sprites, name, false) end)
+  end
+
+  def destroy_sprite(name) when is_binary(name) do
+    Agent.update(__MODULE__, fn state ->
+      %{
+        state
+        | sprites: Map.delete(state.sprites, name),
+          sprite_destroys: [name | state.sprite_destroys]
+      }
+    end)
+  end
+
+  def runs, do: Agent.get(__MODULE__, &Enum.reverse(&1.runs))
+  def stops, do: Agent.get(__MODULE__, &Enum.reverse(&1.stops))
+  def starts, do: Agent.get(__MODULE__, &Enum.reverse(&1.starts))
+  def failures, do: Agent.get(__MODULE__, &Enum.reverse(&1.failures))
+  def sprite_destroys, do: Agent.get(__MODULE__, &Enum.reverse(&1.sprite_destroys))
+end
+
+defmodule Jido.Lib.Test.FakeShellSession do
+  @moduledoc false
+
+  def start_with_vfs(workspace_id, opts \\ []) when is_binary(workspace_id) and is_list(opts) do
+    Jido.Lib.Test.FakeShellState.ensure_started!()
+    Jido.Lib.Test.FakeShellState.add_start({workspace_id, opts})
+    {:ok, "sess-#{workspace_id}"}
+  end
+end
+
+defmodule Jido.Lib.Test.FakeShellAgent do
+  @moduledoc false
+
+  def run(session_id, command, _opts \\ []) when is_binary(session_id) and is_binary(command) do
+    Jido.Lib.Test.FakeShellState.ensure_started!()
+    Jido.Lib.Test.FakeShellState.add_run({session_id, command})
+
+    case matching_failure(command) do
+      {:error, reason} ->
+        {:error, reason}
+
+      nil ->
+        scripted_response(command)
+    end
+  end
+
+  def stop(session_id) when is_binary(session_id) do
+    Jido.Lib.Test.FakeShellState.ensure_started!()
+    Jido.Lib.Test.FakeShellState.add_stop(session_id)
+    :ok
+  end
+
+  defp matching_failure(command) do
+    Enum.find_value(Jido.Lib.Test.FakeShellState.failures(), fn {pattern, reason} ->
+      if String.contains?(command, pattern), do: {:error, reason}, else: nil
+    end)
+  end
+
+  defp scripted_response(command) do
+    cond do
+      String.contains?(command, "command -v gh") ->
+        {:ok, "present"}
+
+      String.contains?(command, "command -v git") ->
+        {:ok, "present"}
+
+      String.contains?(command, "command -v claude") ->
+        {:ok, "present"}
+
+      String.contains?(command, "ANTHROPIC_BASE_URL") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "CLAUDE_CODE_API_KEY") and
+          String.contains?(command, "ANTHROPIC_AUTH_TOKEN") ->
+        {:ok, "ANTHROPIC_AUTH_TOKEN"}
+
+      String.contains?(command, "gh issue view") ->
+        {:ok,
+         Jason.encode!(%{
+           "title" => "Bug: Widget crashes on nil",
+           "body" => "Widget.call/1 crashes when passed nil input.",
+           "labels" => [%{"name" => "bug"}],
+           "author" => %{"login" => "testuser"},
+           "state" => "OPEN",
+           "url" => "https://github.com/test/repo/issues/42"
+         })}
+
+      String.contains?(command, "git clone") ->
+        {:ok, "Cloning into '/tmp/repo'..."}
+
+      String.contains?(command, "mix deps.get") ->
+        {:ok, "Resolved and locked"}
+
+      String.contains?(command, "mix compile") ->
+        {:ok, "Compiled 42 files"}
+
+      String.contains?(command, "claude -p") ->
+        {:ok,
+         [
+           Jason.encode!(%{"type" => "system", "subtype" => "init", "model" => "claude-test"}),
+           Jason.encode!(%{
+             "type" => "stream_event",
+             "event" => %{
+               "type" => "content_block_delta",
+               "delta" => %{"type" => "text_delta", "text" => "## Investigation Report\n\n"}
+             }
+           }),
+           Jason.encode!(%{
+             "type" => "result",
+             "subtype" => "success",
+             "is_error" => false,
+             "result" => "## Investigation Report\n\nRoot cause found."
+           })
+         ]
+         |> Enum.join("\n")}
+
+      String.contains?(command, "gh issue comment") ->
+        {:ok, "https://github.com/test/repo/issues/42#issuecomment-1"}
+
+      true ->
+        {:ok, "ok"}
+    end
+  end
+end
+
+defmodule Jido.Lib.Test.FakeSprites do
+  @moduledoc false
+
+  def new(token, opts \\ []) when is_binary(token) and is_list(opts) do
+    %{token: token, opts: opts}
+  end
+
+  def sprite(client, name) when is_binary(name) do
+    %{client: client, name: name}
+  end
+
+  def get_sprite(_client, name) when is_binary(name) do
+    Jido.Lib.Test.FakeShellState.ensure_started!()
+
+    if Jido.Lib.Test.FakeShellState.sprite_exists?(name) do
+      {:ok, %{"name" => name, "status" => "tracked"}}
+    else
+      {:error, :not_found}
+    end
+  end
+
+  def destroy(%{name: name}) when is_binary(name) do
+    Jido.Lib.Test.FakeShellState.ensure_started!()
+    Jido.Lib.Test.FakeShellState.destroy_sprite(name)
+    :ok
+  end
+end

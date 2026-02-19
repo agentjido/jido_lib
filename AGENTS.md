@@ -2,56 +2,36 @@
 
 ## Overview
 
-Jido Lib is a standard library of reusable agents and actions for common Jido development tasks.
+`jido_lib` provides standard-library modules for the Jido ecosystem.
 
-## What This Package Provides
+Current focus:
+- `Jido.Lib.Github.Agents.IssueTriageBot` (canonical signal-first API + Runic workflow orchestrator)
 
-- **Agents**: Pre-built agents for common workflows (file operations, testing, documentation)
-- **Actions**: Composable action modules for CLI tasks
-- **Utilities**: Helpers for logging, error handling, validation
+## Namespace
 
-## AI Agent Instructions
+All GitHub triage code lives under:
+- `Jido.Lib.Github.Agents.*`
+- `Jido.Lib.Github.Actions.*`
+- `Jido.Lib.Github.Schema.*`
 
-When working with Jido Lib code:
+Do not introduce generic shell abstractions in this package (for example `Jido.Lib.Shell.Backend`).
+Shell backend abstractions belong in `jido_shell`.
 
-1. **Structure**: Respect the module hierarchy (`JidoLib.Agents.*`, `JidoLib.Actions.*`)
-2. **Testing**: All public APIs must have accompanying tests in `test/`
-3. **Documentation**: Use `@moduledoc` and `@doc` with examples for all public functions
-4. **Error Handling**: Use `JidoLib.Error` module for all exceptions; never raise bare exceptions
-5. **Validation**: Use Zoi schemas in modules under `JidoLib.Schema.*`
-6. **Commits**: Follow conventional commits format (`feat()`, `fix()`, `docs()`, etc.)
+## Quality Requirements
 
-## Quality Standards
+- Elixir `~> 1.18`
+- Zoi schemas for public structs
+- Splode for package-level error classification (`Jido.Lib.Error`)
+- `mix quality` and `mix test` must pass before commit
+- Public modules/functions must have docs and specs
 
-- Run `mix quality` before committing
-- All modules must pass `doctor --raise`
-- Test coverage minimum 90%
-- No unused dependencies or variables
+## Testing Guidance
 
-## Development Workflow
+- Keep unit tests deterministic with fake shell/session modules in `test/support/`
+- Keep live Sprite/GitHub tests under `@tag :integration`
+- Ensure workflow tests validate node ordering, data pass-through, and teardown behavior
 
-```bash
-# Setup
-mix setup
+## Workflow Spec
 
-# Test
-mix test
-
-# Quality checks
-mix quality
-
-# Documentation
-mix docs
-```
-
-## Dependency on Jido Core
-
-This package depends on `jido ~> 2.0.0-rc.5` for:
-- Agent protocol
-- Action module system
-- Event streaming
-- Error classification
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines.
+Canonical workflow documentation lives at:
+- `docs/github_issue_triage_workflow.md`

@@ -1,4 +1,4 @@
-defmodule JidoLib.MixProject do
+defmodule Jido.Lib.MixProject do
   use Mix.Project
 
   @version "0.1.0"
@@ -19,7 +19,7 @@ defmodule JidoLib.MixProject do
       homepage_url: @source_url,
       docs: [
         main: "readme",
-        extras: ["README.md"]
+        extras: ["README.md", "docs/github_issue_triage_workflow.md"]
       ],
       # Hex
       package: [
@@ -44,6 +44,12 @@ defmodule JidoLib.MixProject do
     [
       # Jido ecosystem
       {:jido, "~> 2.0.0-rc.5"},
+      {:jido_runic, path: "../jido_runic"},
+      {:jido_action, github: "agentjido/jido_action", branch: "main", override: true},
+      {:libgraph, github: "zblanco/libgraph", branch: "zw/multigraph-indexes", override: true},
+      {:jido_shell, path: "../jido_shell"},
+      {:jido_vfs, path: "../jido_vfs", override: true},
+      {:sprites, git: "https://github.com/mikehostetler/sprites-ex.git"},
 
       # Schemas & validation
       {:zoi, "~> 0.14"},

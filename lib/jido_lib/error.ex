@@ -1,6 +1,6 @@
-defmodule JidoLib.Error do
+defmodule Jido.Lib.Error do
   @moduledoc """
-  Centralized error handling for JidoLib using Splode.
+  Centralized error handling for `Jido.Lib` using Splode.
 
   Error classes are for classification; concrete `...Error` structs are for raising/matching.
   """
@@ -14,7 +14,6 @@ defmodule JidoLib.Error do
     ],
     unknown_error: __MODULE__.Internal.UnknownError
 
-  # Error classes – classification only
   defmodule Invalid do
     @moduledoc "Invalid input error class for Splode."
     use Splode.ErrorClass, class: :invalid
@@ -40,7 +39,6 @@ defmodule JidoLib.Error do
     end
   end
 
-  # Concrete exception structs – raise/rescue these
   defmodule InvalidInputError do
     @moduledoc "Error for invalid input parameters."
     defexception [:message, :field, :value, :details]
@@ -82,59 +80,19 @@ defmodule JidoLib.Error do
     def message(%__MODULE__{message: msg}), do: msg
   end
 
-  # Helper functions
-  @doc """
-  Creates a validation error.
-
-  ## Parameters
-
-    * `message` - Error message
-    * `details` - Map of error details (default: %{})
-
-  ## Returns
-
-    * `InvalidInputError` exception
-
-  ## Examples
-
-      iex> error = JidoLib.Error.validation_error("Invalid email", %{field: :email})
-      iex> error.message
-      "Invalid email"
-  """
+  @doc "Creates a validation error."
   @spec validation_error(String.t(), map()) :: InvalidInputError.t()
   def validation_error(message, details \\ %{}) do
     InvalidInputError.exception(Keyword.merge([message: message], Map.to_list(details)))
   end
 
-  @doc """
-  Creates an execution error.
-
-  ## Parameters
-
-    * `message` - Error message
-    * `details` - Map of error details (default: %{})
-
-  ## Returns
-
-    * `ExecutionFailureError` exception
-  """
+  @doc "Creates an execution error."
   @spec execution_error(String.t(), map()) :: ExecutionFailureError.t()
   def execution_error(message, details \\ %{}) do
     ExecutionFailureError.exception(message: message, details: details)
   end
 
-  @doc """
-  Creates a configuration error.
-
-  ## Parameters
-
-    * `message` - Error message
-    * `details` - Map of error details (default: %{})
-
-  ## Returns
-
-    * `ConfigError` exception
-  """
+  @doc "Creates a configuration error."
   @spec config_error(String.t(), map()) :: ConfigError.t()
   def config_error(message, details \\ %{}) do
     ConfigError.exception(message: message, details: details)

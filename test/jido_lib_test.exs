@@ -1,8 +1,8 @@
-defmodule JidoLibTest do
+defmodule Jido.LibTest do
   use ExUnit.Case
-  doctest JidoLib
+  doctest Jido.Lib
 
-  test "greets the world" do
-    assert JidoLib.hello() == :world
+  test "returns version" do
+    assert is_binary(Jido.Lib.version())
   end
 end
