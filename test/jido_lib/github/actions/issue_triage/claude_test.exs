@@ -135,7 +135,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ClaudeTest do
     assert result.investigation_error =~ "prompt_write_failed"
   end
 
-  test "cancels session-server command on timeout and does not fallback" do
+  test "times out on session-server stream and does not fallback" do
     Process.register(self(), @cancel_probe_name)
 
     params = %{
@@ -152,7 +152,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ClaudeTest do
     assert result.investigation_status == :failed
     assert result.investigation_error =~ "timeout"
 
-    assert_receive {:cancel_called, "sess-timeout"}
+    refute_receive {:cancel_called, "sess-timeout"}
 
     assert_receive {:jido_lib_signal,
                     %Jido.Signal{
