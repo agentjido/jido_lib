@@ -1,22 +1,21 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.Helpers do
+defmodule Jido.Lib.Github.Actions.PrBot.Helpers do
   @moduledoc false
 
   @pipeline_keys [
-    :session_id,
-    :observer_pid,
-    :workspace_dir,
-    :run_id,
+    :issue_url,
     :owner,
     :repo,
     :issue_number,
-    :issue_url,
+    :run_id,
     :timeout,
-    :keep_workspace,
     :keep_sprite,
     :setup_commands,
     :check_commands,
     :base_branch,
     :branch_prefix,
+    :observer_pid,
+    :session_id,
+    :workspace_dir,
     :repo_dir,
     :issue_title,
     :issue_body,
@@ -25,20 +24,31 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.Helpers do
     :sprite_name,
     :github_auth_ready,
     :runtime_checks,
-    :investigation,
-    :investigation_status,
-    :investigation_error,
-    :comment_posted,
-    :comment_url,
-    :comment_error,
-    :teardown_verified,
-    :teardown_attempts,
-    :warnings,
-    :prompt,
     :sprites_mod,
     :shell_agent_mod,
     :shell_session_mod,
-    :sprite_config
+    :sprite_config,
+    :base_sha,
+    :branch_name,
+    :claude_status,
+    :claude_summary,
+    :commit_sha,
+    :commits_since_base,
+    :fallback_commit_used,
+    :checks_passed,
+    :check_results,
+    :branch_pushed,
+    :pr_created,
+    :pr_number,
+    :pr_url,
+    :pr_title,
+    :issue_comment_posted,
+    :issue_comment_error,
+    :teardown_verified,
+    :teardown_attempts,
+    :warnings,
+    :message,
+    :error
   ]
 
   @spec pass_through(map(), [atom()]) :: map()
@@ -63,5 +73,21 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.Helpers do
   @spec escape_path(String.t()) :: String.t()
   def escape_path(path) when is_binary(path) do
     Jido.Shell.Exec.escape_path(path)
+  end
+
+  @spec shell_escape(String.t() | atom() | number()) :: String.t()
+  def shell_escape(value) do
+    value
+    |> to_string()
+    |> String.replace("'", "'\"'\"'")
+    |> then(&"'#{&1}'")
+  end
+
+  @spec map_get(map(), atom(), term()) :: term()
+  def map_get(map, key, default \\ nil) when is_map(map) and is_atom(key) do
+    case Map.fetch(map, key) do
+      {:ok, value} -> value
+      :error -> Map.get(map, Atom.to_string(key), default)
+    end
   end
 end

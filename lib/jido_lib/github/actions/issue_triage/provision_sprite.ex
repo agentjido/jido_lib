@@ -23,6 +23,8 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ProvisionSprite do
       shell_session_mod: [type: :atom, default: Jido.Shell.ShellSession]
     ]
 
+  alias Jido.Lib.Github.Actions.IssueTriage.Helpers
+
   @impl true
   def run(params, _context) do
     sprite_config = params.sprite_config
@@ -41,27 +43,18 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ProvisionSprite do
              workspace_dir: workspace_dir,
              sprite_name: sprite_name
            ) do
+      passthrough = Helpers.pass_through(params)
+
       {:ok,
-       %{
+       Map.merge(passthrough, %{
          session_id: provisioned.session_id,
          sprite_name: provisioned.sprite_name,
          workspace_dir: provisioned.workspace_dir,
-         observer_pid: params[:observer_pid],
-         run_id: params.run_id,
-         owner: params.owner,
-         repo: params.repo,
-         issue_number: params.issue_number,
-         issue_url: params[:issue_url],
          timeout: params[:timeout] || 300_000,
-         keep_workspace: params[:keep_workspace] || false,
-         keep_sprite: params[:keep_sprite] || false,
-         setup_commands: params[:setup_commands] || [],
-         prompt: params[:prompt],
-         sprites_mod: params[:sprites_mod] || Sprites,
          shell_agent_mod: agent_mod,
          shell_session_mod: session_mod,
          sprite_config: sprite_config
-       }}
+       })}
     else
       {:error, reason} ->
         {:error, {:provision_sprite_failed, reason}}

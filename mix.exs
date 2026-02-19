@@ -19,7 +19,11 @@ defmodule Jido.Lib.MixProject do
       homepage_url: @source_url,
       docs: [
         main: "readme",
-        extras: ["README.md", "docs/github_issue_triage_workflow.md"]
+        extras: [
+          "README.md",
+          "docs/github_issue_triage_workflow.md",
+          "docs/github_pr_bot_workflow.md"
+        ]
       ],
       # Hex
       package: [

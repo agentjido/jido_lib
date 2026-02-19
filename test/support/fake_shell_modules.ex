@@ -108,6 +108,10 @@ defmodule Jido.Lib.Test.FakeShellAgent do
 
   defp scripted_response(command) do
     cond do
+      String.contains?(command, "gh repo view") and
+          String.contains?(command, "defaultBranchRef") ->
+        {:ok, "main"}
+
       String.contains?(command, "command -v gh") ->
         {:ok, "present"}
 
@@ -138,6 +142,51 @@ defmodule Jido.Lib.Test.FakeShellAgent do
 
       String.contains?(command, "git clone") ->
         {:ok, "Cloning into '/tmp/repo'..."}
+
+      String.contains?(command, "git fetch origin") ->
+        {:ok, "Fetched"}
+
+      String.contains?(command, "git checkout -b") ->
+        {:ok, "Switched to a new branch"}
+
+      String.contains?(command, "git checkout") ->
+        {:ok, "Switched branch"}
+
+      String.contains?(command, "git pull --ff-only origin") ->
+        {:ok, "Already up to date."}
+
+      String.contains?(command, "git show-ref --verify --quiet") ->
+        {:ok, "missing"}
+
+      String.contains?(command, "git ls-remote --exit-code --heads") ->
+        {:ok, "missing"}
+
+      String.contains?(command, "git rev-list --count") ->
+        {:ok, "1"}
+
+      String.contains?(command, "git status --porcelain") ->
+        {:ok, ""}
+
+      String.contains?(command, "git rev-parse HEAD") ->
+        {:ok, "head-sha-123"}
+
+      String.contains?(command, "git rev-parse") ->
+        {:ok, "base-sha-main"}
+
+      String.contains?(command, "git add -A && git commit -m") ->
+        {:ok, "[feature 123] fix commit"}
+
+      String.contains?(command, "git remote get-url origin") ->
+        {:ok, "https://github.com/test/repo.git"}
+
+      String.contains?(command, "git push -u origin") ->
+        {:ok, "branch pushed"}
+
+      String.contains?(command, "gh pr list") ->
+        {:ok, "[]"}
+
+      String.contains?(command, "gh pr create") ->
+        {:ok, "https://github.com/test/repo/pull/7"}
 
       String.contains?(command, "mix deps.get") ->
         {:ok, "Resolved and locked"}
