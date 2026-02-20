@@ -34,7 +34,8 @@ defmodule Jido.Lib.Github.Actions.ValidateRuntime do
            Exec.validate_shared_runtime(
              params.session_id,
              shell_agent_mod: agent_mod,
-             timeout: timeout
+             timeout: timeout,
+             profiles: [:generic, :github]
            ),
          {:ok, provider_checks} <-
            Exec.validate_provider_runtime(
