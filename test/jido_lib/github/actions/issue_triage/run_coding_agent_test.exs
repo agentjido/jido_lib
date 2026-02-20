@@ -18,6 +18,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
       issue_body: "Body",
       run_id: "run-123",
       observer_pid: self(),
+      provider_runtime_ready: true,
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
@@ -46,6 +47,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
       session_id: "sess-123",
       issue_number: 42,
       run_id: "run-123",
+      provider_runtime_ready: true,
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
@@ -53,5 +55,21 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
     assert result.investigation_status == :failed
     assert result.agent_status == :failed
     assert is_binary(result.agent_error)
+  end
+
+  test "returns failed state when provider runtime has not been prepared" do
+    params = %{
+      provider: :claude,
+      repo_dir: "/work/repo",
+      session_id: "sess-123",
+      issue_number: 42,
+      run_id: "run-123",
+      shell_agent_mod: Jido.Lib.Test.FakeShellAgent
+    }
+
+    assert {:ok, result} = Jido.Exec.run(RunCodingAgent, params, %{})
+    assert result.investigation_status == :failed
+    assert result.agent_status == :failed
+    assert result.agent_error =~ "provider_runtime_not_ready"
   end
 end

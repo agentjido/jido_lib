@@ -37,7 +37,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateRuntimeTest do
   end
 
   test "fails when required runtime checks are missing" do
-    Jido.Lib.Test.FakeShellState.add_failure("command -v claude", :missing)
+    Jido.Lib.Test.FakeShellState.add_failure("command -v 'claude'", :missing)
 
     params = %{
       session_id: "sess-123",

@@ -21,6 +21,8 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgent do
       timeout: [type: :integer, default: 600_000],
       run_id: [type: {:or, [:string, nil]}, default: nil],
       observer_pid: [type: {:or, [:any, nil]}, default: nil],
+      provider_runtime_ready: [type: {:or, [:boolean, nil]}, default: nil],
+      runtime_checks: [type: {:or, [:map, nil]}, default: nil],
       shell_agent_mod: [type: :atom, default: Jido.Shell.Agent],
       shell_session_server_mod: [type: :atom, default: Jido.Shell.ShellSessionServer]
     ]
@@ -50,7 +52,8 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgent do
       repo_dir: params[:repo_dir]
     })
 
-    with :ok <- write_prompt_file(params, prompt_file, prompt),
+    with :ok <- ensure_runtime_ready(params),
+         :ok <- write_prompt_file(params, prompt_file, prompt),
          {:ok, command} <- ProviderRuntime.build_command(provider, :coding, prompt_file),
          {:ok, result} <-
            Exec.run_stream(
@@ -152,6 +155,17 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgent do
     end
   end
 
+  defp ensure_runtime_ready(params) do
+    ready? = map_get(params, :provider_runtime_ready, false)
+    runtime_checks = map_get(params, :runtime_checks)
+
+    if ready? == true or is_map(runtime_checks) do
+      :ok
+    else
+      {:error, :provider_runtime_not_ready}
+    end
+  end
+
   defp maybe_add_claude_aliases(attrs, :claude) do
     attrs
     |> Map.put(:claude_status, attrs.agent_status)
@@ -228,6 +242,10 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgent do
   defp emit_signal(_pid, _suffix, _data), do: :ok
 
   defp map_get(map, key) when is_map(map) and is_atom(key) do
-    Map.get(map, key, Map.get(map, Atom.to_string(key)))
+    map_get(map, key, nil)
+  end
+
+  defp map_get(map, key, default) when is_map(map) and is_atom(key) do
+    Map.get(map, key, Map.get(map, Atom.to_string(key), default))
   end
 end

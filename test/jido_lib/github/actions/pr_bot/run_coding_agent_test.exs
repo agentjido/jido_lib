@@ -18,6 +18,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgentTest do
       issue_body: "Body",
       run_id: "run-123",
       observer_pid: self(),
+      provider_runtime_ready: true,
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
@@ -46,12 +47,28 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgentTest do
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,
+      provider_runtime_ready: true,
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
               message: {:run_coding_agent_failed, _reason}
+            }} = Jido.Exec.run(RunCodingAgent, params, %{})
+  end
+
+  test "returns execution failure when runtime is not prepared" do
+    params = %{
+      provider: :claude,
+      repo_dir: "/work/repo",
+      session_id: "sess-123",
+      issue_number: 42,
+      shell_agent_mod: Jido.Lib.Test.FakeShellAgent
+    }
+
+    assert {:error,
+            %Jido.Action.Error.ExecutionFailureError{
+              message: {:run_coding_agent_failed, :provider_runtime_not_ready}
             }} = Jido.Exec.run(RunCodingAgent, params, %{})
   end
 end

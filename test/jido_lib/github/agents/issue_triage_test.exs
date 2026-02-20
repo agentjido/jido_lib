@@ -53,7 +53,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
     fetch_idx = command_index(runs, "gh issue view 42")
     clone_idx = command_index(runs, "git clone --depth 1")
     setup_idx = command_index(runs, "mix deps.get")
-    validate_idx = command_index(runs, "command -v gh")
+    validate_idx = command_index(runs, "command -v 'gh'")
     claude_idx = command_index(runs, "claude -p")
     comment_idx = command_index(runs, "gh issue comment 42")
 

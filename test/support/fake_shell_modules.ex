@@ -153,22 +153,22 @@ defmodule Jido.Lib.Test.FakeShellAgent do
           String.contains?(command, "echo present") ->
         {:ok, "present"}
 
-      String.contains?(command, "command -v gh") ->
+      tool_check?(command, "gh") ->
         {:ok, "present"}
 
-      String.contains?(command, "command -v git") ->
+      tool_check?(command, "git") ->
         {:ok, "present"}
 
-      String.contains?(command, "command -v claude") ->
+      tool_check?(command, "claude") ->
         {:ok, "present"}
 
-      String.contains?(command, "command -v amp") ->
+      tool_check?(command, "amp") ->
         {:ok, "present"}
 
-      String.contains?(command, "command -v codex") ->
+      tool_check?(command, "codex") ->
         {:ok, "present"}
 
-      String.contains?(command, "command -v gemini") ->
+      tool_check?(command, "gemini") ->
         {:ok, "present"}
 
       String.contains?(command, "ANTHROPIC_BASE_URL") and
@@ -300,6 +300,11 @@ defmodule Jido.Lib.Test.FakeShellAgent do
       true ->
         {:ok, "ok"}
     end
+  end
+
+  defp tool_check?(command, tool) when is_binary(command) and is_binary(tool) do
+    String.contains?(command, "command -v #{tool}") or
+      String.contains?(command, "command -v '#{tool}'")
   end
 end
 
