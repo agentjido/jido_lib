@@ -1,16 +1,17 @@
-defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgentTest do
+defmodule Jido.Lib.Github.Actions.RunCodingAgentCodingTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.PrBot.RunCodingAgent
+  alias Jido.Lib.Github.Actions.RunCodingAgent
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()
     :ok
   end
 
-  test "runs coding agent and returns agent summary with claude aliases" do
+  test "runs coding agent and returns agent summary" do
     params = %{
       provider: :claude,
+      agent_mode: :coding,
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,
@@ -26,17 +27,13 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgentTest do
     assert result.provider == :claude
     assert result.agent_status == :ok
     assert result.agent_summary =~ "Investigation Report"
-    assert result.claude_status == :ok
-    assert result.claude_summary == result.agent_summary
+
+    assert_receive {:jido_lib_signal, %Jido.Signal{type: "jido.lib.github.coding_agent.started"}}
+
+    assert_receive {:jido_lib_signal, %Jido.Signal{type: "jido.lib.github.coding_agent.mode"}}
 
     assert_receive {:jido_lib_signal,
-                    %Jido.Signal{type: "jido.lib.github.pr_bot.coding_agent.started"}}
-
-    assert_receive {:jido_lib_signal,
-                    %Jido.Signal{type: "jido.lib.github.pr_bot.coding_agent.mode"}}
-
-    assert_receive {:jido_lib_signal,
-                    %Jido.Signal{type: "jido.lib.github.pr_bot.coding_agent.completed"}}
+                    %Jido.Signal{type: "jido.lib.github.coding_agent.completed"}}
   end
 
   test "returns execution failure when coding agent command fails" do
@@ -44,6 +41,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgentTest do
 
     params = %{
       provider: :claude,
+      agent_mode: :coding,
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,
@@ -60,6 +58,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunCodingAgentTest do
   test "returns execution failure when runtime is not prepared" do
     params = %{
       provider: :claude,
+      agent_mode: :coding,
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,

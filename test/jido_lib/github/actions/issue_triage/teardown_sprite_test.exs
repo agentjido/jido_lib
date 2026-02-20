@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.TeardownSpriteTest do
+defmodule Jido.Lib.Github.Actions.TeardownSpriteTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.TeardownSprite
+  alias Jido.Lib.Github.Actions.TeardownSprite
 
   defmodule AlwaysPresentSprites do
     def new(_token, _opts \\ []), do: %{client: :ok}

@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.PrBot.PushBranchTest do
+defmodule Jido.Lib.Github.Actions.PushBranchTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.PrBot.PushBranch
+  alias Jido.Lib.Github.Actions.PushBranch
 
   defmodule WrongRemoteShellAgent do
     def run(_session_id, command, _opts \\ []) do

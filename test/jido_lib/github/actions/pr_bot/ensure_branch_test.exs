@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.PrBot.EnsureBranchTest do
+defmodule Jido.Lib.Github.Actions.EnsureBranchTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.PrBot.EnsureBranch
+  alias Jido.Lib.Github.Actions.EnsureBranch
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()

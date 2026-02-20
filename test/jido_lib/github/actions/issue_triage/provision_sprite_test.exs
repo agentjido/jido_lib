@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.ProvisionSpriteTest do
+defmodule Jido.Lib.Github.Actions.ProvisionSpriteTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.ProvisionSprite
+  alias Jido.Lib.Github.Actions.ProvisionSprite
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()

@@ -64,6 +64,18 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBotIntakeTest do
     assert intake.provider == :codex
   end
 
+  test "build_intake_attrs/5 raises on invalid provider" do
+    assert_raise ArgumentError, ~r/Invalid provider/, fn ->
+      IssueTriageBot.build_intake_attrs(
+        "agentjido",
+        "jido_chat",
+        19,
+        "https://github.com/agentjido/jido_chat/issues/19",
+        provider: "bogus"
+      )
+    end
+  end
+
   test "intake_signal/1 wraps payload in runic.feed signal" do
     signal =
       IssueTriageBot.intake_signal(%{

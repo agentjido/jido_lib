@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.CloneRepoTest do
+defmodule Jido.Lib.Github.Actions.CloneRepoTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.CloneRepo
+  alias Jido.Lib.Github.Actions.CloneRepo
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()

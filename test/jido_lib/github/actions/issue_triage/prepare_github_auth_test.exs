@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.PrepareGithubAuthTest do
+defmodule Jido.Lib.Github.Actions.PrepareGithubAuthTest do
   use ExUnit.Case, async: true
 
-  alias Jido.Lib.Github.Actions.IssueTriage.PrepareGithubAuth
+  alias Jido.Lib.Github.Actions.PrepareGithubAuth
 
   defmodule MissingTokenShellAgent do
     def run(_session_id, command, _opts) do

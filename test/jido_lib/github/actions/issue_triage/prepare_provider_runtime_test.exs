@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.PrepareProviderRuntimeTest do
+defmodule Jido.Lib.Github.Actions.PrepareProviderRuntimeTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.PrepareProviderRuntime
+  alias Jido.Lib.Github.Actions.PrepareProviderRuntime
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()

@@ -15,25 +15,15 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
   """
 
   use Mix.Task
-  require Logger
 
   @shortdoc "Triage a GitHub issue with Jido.Lib"
 
   alias Jido.Lib.Github.Agents.IssueTriageBot
-
-  @supported_providers [:claude, :amp, :codex, :gemini]
+  alias Jido.Lib.Github.Helpers
 
   @doc false
   def handle_telemetry([:jido_runic, :runnable, status], _measurements, metadata, config) do
-    node = metadata[:node]
-    name = if node, do: node.name, else: :unknown
-    elapsed = System.monotonic_time(:millisecond) - config.start_time
-    elapsed_s = Float.round(elapsed / 1000, 1)
-
-    icon = if status == :completed, do: "OK", else: "FAIL"
-    label = name |> to_string() |> String.replace("_", " ")
-
-    config.shell.info("[Runic] #{label} #{icon} (#{elapsed_s}s)")
+    Helpers.handle_telemetry([:jido_runic, :runnable, status], %{}, metadata, config)
   end
 
   @impl Mix.Task
@@ -55,6 +45,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
     url = List.first(args) || Mix.raise("Usage: mix jido_lib.github.triage <github_issue_url>")
     timeout = (opts[:timeout] || 300) * 1_000
     provider = parse_provider(opts[:provider])
+    setup_commands = setup_commands_from_opts(opts)
 
     handler_id = "jido-lib-github-triage-progress-#{System.unique_integer([:positive])}"
 
@@ -73,7 +64,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
 
     triage =
       try do
-        with_logger_level(:warning, fn ->
+        Helpers.with_logger_level(:warning, fn ->
           triage =
             IssueTriageBot.triage(
               url,
@@ -81,7 +72,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
               provider: provider,
               timeout: timeout,
               keep_sprite: opts[:keep_sprite] || false,
-              setup_commands: opts[:setup_cmd] || [],
+              setup_commands: setup_commands,
               observer: Mix.shell(),
               debug: false
             )
@@ -104,7 +95,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
     IssueTriageBot.build_intake_attrs(owner, repo, number, url,
       provider: parse_provider(Keyword.get(opts, :provider)),
       keep_sprite: opts[:keep_sprite] || false,
-      setup_cmd: opts[:setup_cmd] || [],
+      setup_cmd: setup_commands_from_opts(opts),
       timeout: timeout_ms
     )
   end
@@ -131,6 +122,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
         end
 
       %{error: error} when not is_nil(error) ->
+        maybe_print_jido_not_started(error)
         Mix.shell().error("triage failed: #{inspect(error)}")
 
       _ ->
@@ -138,54 +130,46 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
     end
   end
 
-  defp with_logger_level(level, fun) when is_atom(level) and is_function(fun, 0) do
-    previous_level = Logger.level()
-    previous_agent_level = Logger.get_module_level(Jido.AgentServer)
-    Logger.configure(level: level)
-    Logger.put_module_level(Jido.AgentServer, :error)
-
-    try do
-      fun.()
-    after
-      Process.sleep(250)
-      restore_agent_server_level(previous_agent_level)
-      Logger.configure(level: previous_level)
-    end
-  end
-
-  defp restore_agent_server_level([{Jido.AgentServer, level}]) when is_atom(level),
-    do: Logger.put_module_level(Jido.AgentServer, level)
-
-  defp restore_agent_server_level(_), do: Logger.delete_module_level(Jido.AgentServer)
-
-  defp parse_provider(nil), do: :claude
-  defp parse_provider(provider) when provider in @supported_providers, do: provider
-
-  defp parse_provider(provider) when is_binary(provider) do
-    normalized =
-      provider
-      |> String.trim()
-      |> String.downcase()
-
-    case normalized do
-      "claude" ->
-        :claude
-
-      "amp" ->
-        :amp
-
-      "codex" ->
-        :codex
-
-      "gemini" ->
-        :gemini
-
-      _ ->
-        Mix.raise("Invalid --provider #{inspect(provider)}. Allowed: claude, amp, codex, gemini")
-    end
-  end
-
   defp parse_provider(provider) do
-    Mix.raise("Invalid --provider #{inspect(provider)}. Allowed: claude, amp, codex, gemini")
+    Helpers.provider_normalize!(provider)
+  rescue
+    ArgumentError ->
+      Mix.raise(
+        "Invalid --provider #{inspect(provider)}. Allowed: #{Helpers.provider_allowed_string()}"
+      )
   end
+
+  defp maybe_print_jido_not_started({:jido_not_started, jido}) do
+    Mix.shell().error(
+      "Jido instance #{inspect(jido)} is not started. Start it from your entrypoint before running the bot."
+    )
+  end
+
+  defp maybe_print_jido_not_started(_), do: :ok
+
+  defp setup_commands_from_opts(opts) when is_list(opts) do
+    values =
+      case Keyword.get_values(opts, :setup_cmd) do
+        [] -> Keyword.get(opts, :setup_cmd, [])
+        many -> many
+      end
+
+    normalize_setup_commands(values)
+  end
+
+  defp normalize_setup_commands(nil), do: []
+
+  defp normalize_setup_commands(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> []
+      command -> [command]
+    end
+  end
+
+  defp normalize_setup_commands(values) when is_list(values) do
+    values
+    |> Enum.flat_map(&normalize_setup_commands/1)
+  end
+
+  defp normalize_setup_commands(_), do: []
 end

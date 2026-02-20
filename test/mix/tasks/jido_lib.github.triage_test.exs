@@ -65,6 +65,47 @@ defmodule Mix.Tasks.JidoLib.Github.TriageTest do
     assert attrs.sprite_config.env["GH_TOKEN"] == "gh-token"
   end
 
+  test "build_intake_attrs/6 normalizes scalar setup_cmd to list" do
+    attrs =
+      Triage.build_intake_attrs(
+        "agentjido",
+        "jido",
+        42,
+        "https://github.com/agentjido/jido/issues/42",
+        [setup_cmd: "mix deps.get"],
+        300_000
+      )
+
+    assert attrs.setup_commands == ["mix deps.get"]
+  end
+
+  test "build_intake_attrs/6 preserves repeated setup_cmd values" do
+    attrs =
+      Triage.build_intake_attrs(
+        "agentjido",
+        "jido",
+        42,
+        "https://github.com/agentjido/jido/issues/42",
+        [setup_cmd: "mix deps.get", setup_cmd: "mix compile"],
+        300_000
+      )
+
+    assert attrs.setup_commands == ["mix deps.get", "mix compile"]
+  end
+
+  test "build_intake_attrs/6 raises on invalid provider" do
+    assert_raise Mix.Error, ~r/Invalid --provider/, fn ->
+      Triage.build_intake_attrs(
+        "agentjido",
+        "jido",
+        42,
+        "https://github.com/agentjido/jido/issues/42",
+        [provider: "bogus"],
+        300_000
+      )
+    end
+  end
+
   test "build_feed_signal/1 builds runic.feed payload from intake map" do
     signal = Triage.build_feed_signal(%{owner: "agentjido", repo: "jido", issue_number: 42})
 

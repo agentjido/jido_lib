@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.FetchIssueTest do
+defmodule Jido.Lib.Github.Actions.FetchIssueTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.FetchIssue
+  alias Jido.Lib.Github.Actions.FetchIssue
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()

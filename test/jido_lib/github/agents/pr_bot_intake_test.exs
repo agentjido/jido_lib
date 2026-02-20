@@ -61,6 +61,15 @@ defmodule Jido.Lib.Github.Agents.PrBotIntakeTest do
     assert intake.provider == :gemini
   end
 
+  test "build_intake/2 raises on invalid provider" do
+    assert_raise ArgumentError, ~r/Invalid provider/, fn ->
+      PrBot.build_intake(
+        "https://github.com/agentjido/jido_chat/issues/19",
+        provider: "bogus"
+      )
+    end
+  end
+
   test "intake_signal/1 wraps payload in runic.feed signal" do
     signal =
       PrBot.intake_signal(%{

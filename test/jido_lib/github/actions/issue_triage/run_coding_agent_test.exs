@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
+defmodule Jido.Lib.Github.Actions.RunCodingAgentTriageTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.RunCodingAgent
+  alias Jido.Lib.Github.Actions.RunCodingAgent
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()
@@ -11,6 +11,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
   test "runs coding agent and returns investigation output" do
     params = %{
       provider: :claude,
+      agent_mode: :triage,
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,
@@ -28,14 +29,12 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
     assert result.agent_status == :ok
     assert result.agent_summary =~ "Investigation Report"
 
-    assert_receive {:jido_lib_signal,
-                    %Jido.Signal{type: "jido.lib.github.issue_triage.coding_agent.started"}}
+    assert_receive {:jido_lib_signal, %Jido.Signal{type: "jido.lib.github.coding_agent.started"}}
+
+    assert_receive {:jido_lib_signal, %Jido.Signal{type: "jido.lib.github.coding_agent.mode"}}
 
     assert_receive {:jido_lib_signal,
-                    %Jido.Signal{type: "jido.lib.github.issue_triage.coding_agent.mode"}}
-
-    assert_receive {:jido_lib_signal,
-                    %Jido.Signal{type: "jido.lib.github.issue_triage.coding_agent.completed"}}
+                    %Jido.Signal{type: "jido.lib.github.coding_agent.completed"}}
   end
 
   test "returns failed investigation state when provider stream command fails" do
@@ -43,6 +42,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
 
     params = %{
       provider: :claude,
+      agent_mode: :triage,
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,
@@ -60,6 +60,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.RunCodingAgentTest do
   test "returns failed state when provider runtime has not been prepared" do
     params = %{
       provider: :claude,
+      agent_mode: :triage,
       repo_dir: "/work/repo",
       session_id: "sess-123",
       issue_number: 42,

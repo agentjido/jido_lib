@@ -10,10 +10,17 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBotTest do
 
     assert Map.has_key?(components, :validate_host_env)
     assert Map.has_key?(components, :prepare_github_auth)
+    assert Map.has_key?(components, :run_setup_commands)
     assert Map.has_key?(components, :prepare_provider_runtime)
     assert Map.has_key?(components, :run_coding_agent)
+    assert Map.has_key?(components, :post_issue_comment)
 
     assert components[:run_coding_agent].action_mod ==
-             Jido.Lib.Github.Actions.IssueTriage.RunCodingAgent
+             Jido.Lib.Github.Actions.RunCodingAgent
+  end
+
+  test "run/2 fails fast when jido instance is not started" do
+    assert {:error, {:jido_not_started, :missing_jido}} =
+             IssueTriageBot.run(%{run_id: "run-1"}, jido: :missing_jido, timeout: 1_000)
   end
 end

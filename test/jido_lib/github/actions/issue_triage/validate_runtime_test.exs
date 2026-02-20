@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateRuntimeTest do
+defmodule Jido.Lib.Github.Actions.ValidateRuntimeTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.ValidateRuntime
+  alias Jido.Lib.Github.Actions.ValidateRuntime
 
   setup do
     Jido.Lib.Test.FakeShellState.reset!()
@@ -26,7 +26,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateRuntimeTest do
 
     assert_receive {:jido_lib_signal,
                     %Jido.Signal{
-                      type: "jido.lib.github.issue_triage.validate_runtime.checked",
+                      type: "jido.lib.github.validate_runtime.checked",
                       data: %{
                         runtime_checks: %{
                           shared: %{gh: true},

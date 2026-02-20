@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnvTest do
+defmodule Jido.Lib.Github.Actions.ValidateHostEnvTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv
+  alias Jido.Lib.Github.Actions.ValidateHostEnv
 
   @tracked_keys [
     "SPRITES_TOKEN",

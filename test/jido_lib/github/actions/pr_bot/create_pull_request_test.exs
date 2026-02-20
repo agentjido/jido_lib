@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.PrBot.CreatePullRequestTest do
+defmodule Jido.Lib.Github.Actions.CreatePullRequestTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.PrBot.CreatePullRequest
+  alias Jido.Lib.Github.Actions.CreatePullRequest
 
   defmodule ReusedPrShellAgent do
     def run(_session_id, command, _opts \\ []) do

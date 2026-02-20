@@ -61,4 +61,14 @@ defmodule Mix.Tasks.JidoLib.Github.PrTest do
     assert signal.data.data.repo == "jido_chat"
     assert signal.data.data.issue_number == 19
   end
+
+  test "run/1 raises on invalid provider" do
+    assert_raise Mix.Error, ~r/Invalid --provider/, fn ->
+      Pr.run([
+        "https://github.com/agentjido/jido_chat/issues/19",
+        "--provider",
+        "bogus"
+      ])
+    end
+  end
 end

@@ -1,7 +1,7 @@
-defmodule Jido.Lib.Github.Actions.PrBot.EnsureCommitTest do
+defmodule Jido.Lib.Github.Actions.EnsureCommitTest do
   use ExUnit.Case, async: false
 
-  alias Jido.Lib.Github.Actions.PrBot.EnsureCommit
+  alias Jido.Lib.Github.Actions.EnsureCommit
 
   defmodule FallbackShellAgent do
     def run(_session_id, command, _opts \\ []) do
