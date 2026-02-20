@@ -8,6 +8,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.EnsureCommit do
     description: "Validate or create commit for PR branch",
     schema: [
       repo: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       issue_number: [type: :integer, required: true],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],

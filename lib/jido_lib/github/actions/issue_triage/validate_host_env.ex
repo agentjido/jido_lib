@@ -12,6 +12,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv do
       repo: [type: :string, required: true],
       issue_number: [type: :integer, required: true],
       issue_url: [type: {:or, [:string, nil]}, default: nil],
+      provider: [type: :atom, default: :claude],
       timeout: [type: :integer, default: 300_000],
       keep_workspace: [type: :boolean, default: false],
       keep_sprite: [type: :boolean, default: false],
@@ -25,63 +26,107 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv do
     ]
 
   alias Jido.Lib.Github.Actions.IssueTriage.Helpers
-  alias JidoClaude.RuntimeConfig
+  alias Jido.Harness.Exec.ProviderRuntime
 
-  @forward_vars [
-    "ANTHROPIC_BASE_URL",
-    "ANTHROPIC_AUTH_TOKEN",
-    "ANTHROPIC_API_KEY",
-    "CLAUDE_CODE_API_KEY",
-    "ANTHROPIC_DEFAULT_SMALL_MODEL",
-    "ANTHROPIC_DEFAULT_LARGE_MODEL",
-    "ANTHROPIC_DEFAULT_THINKING_MODEL",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL",
-    "GH_TOKEN",
-    "GITHUB_TOKEN"
-  ]
+  @fallback_forward_vars ["GH_TOKEN", "GITHUB_TOKEN"]
+  @default_injected_env %{
+    "GH_PROMPT_DISABLED" => "1",
+    "GIT_TERMINAL_PROMPT" => "0"
+  }
 
   @impl true
   def run(params, _context) do
-    validate_host_env!()
+    provider = params[:provider] || :claude
+    validate_host_env!(provider)
     {:ok, Helpers.pass_through(params)}
   end
 
   @doc """
-  Validate required host env vars for sprite triage + ZAI Claude routing.
+  Validate required host env vars for sprite triage and selected provider.
   """
-  @spec validate_host_env!() :: :ok | no_return()
-  def validate_host_env! do
+  @spec validate_host_env!(atom()) :: :ok | no_return()
+  def validate_host_env!(provider \\ :claude)
+
+  def validate_host_env!(provider) when is_atom(provider) do
     require_env!("SPRITES_TOKEN", "SPRITES_TOKEN environment variable not set")
-    RuntimeConfig.validate_auth_contract!()
 
     require_any_env!(
       ["GH_TOKEN", "GITHUB_TOKEN"],
       "GH_TOKEN or GITHUB_TOKEN environment variable not set"
     )
 
-    :ok
+    case ProviderRuntime.provider_runtime_contract(provider) do
+      {:ok, contract} ->
+        check_required_all(contract.host_env_required_all || [], provider)
+        check_required_any(contract.host_env_required_any || [], provider)
+        :ok
+
+      {:error, reason} ->
+        raise "Provider #{inspect(provider)} runtime contract unavailable: #{inspect(reason)}"
+    end
+  end
+
+  def validate_host_env!(provider) do
+    raise "provider must be an atom, got: #{inspect(provider)}"
+  end
+
+  defp check_required_all([], _provider), do: :ok
+
+  defp check_required_all(keys, provider) do
+    missing =
+      keys
+      |> Enum.reject(&present?(System.get_env(&1)))
+
+    if missing == [] do
+      :ok
+    else
+      raise "Provider #{inspect(provider)} requires env vars: #{Enum.join(missing, ", ")}"
+    end
+  end
+
+  defp check_required_any([], _provider), do: :ok
+
+  defp check_required_any(keys, provider) do
+    if Enum.any?(keys, &present?(System.get_env(&1))) do
+      :ok
+    else
+      raise "Provider #{inspect(provider)} requires at least one of: #{Enum.join(keys, ", ")}"
+    end
   end
 
   @doc """
-  Build the env map propagated into Sprite sessions.
+  Build the env map propagated into Sprite sessions for the selected provider.
   """
-  @spec build_sprite_env() :: map()
-  def build_sprite_env do
-    @forward_vars
-    |> Enum.reduce(
-      %{
-        "GH_PROMPT_DISABLED" => "1",
-        "GIT_TERMINAL_PROMPT" => "0"
-      },
-      fn key, acc ->
+  @spec build_sprite_env(atom()) :: map()
+  def build_sprite_env(provider \\ :claude)
+
+  def build_sprite_env(provider) when is_atom(provider) do
+    {forward_vars, injected} =
+      case ProviderRuntime.provider_runtime_contract(provider) do
+        {:ok, contract} ->
+          {
+            Enum.uniq(@fallback_forward_vars ++ (contract.sprite_env_forward || [])),
+            Map.merge(@default_injected_env, contract.sprite_env_injected || %{})
+          }
+
+        {:error, _} ->
+          {@fallback_forward_vars, @default_injected_env}
+      end
+
+    forward_env =
+      forward_vars
+      |> Enum.reduce(%{}, fn key, acc ->
         case System.get_env(key) do
           nil -> acc
           value -> Map.put(acc, key, value)
         end
-      end
-    )
+      end)
+
+    Map.merge(injected, forward_env)
+  end
+
+  def build_sprite_env(provider) do
+    raise "provider must be an atom, got: #{inspect(provider)}"
   end
 
   defp require_env!(key, message) do

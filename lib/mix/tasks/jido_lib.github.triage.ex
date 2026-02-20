@@ -11,6 +11,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
   - `--timeout` - Pipeline timeout in seconds (default: 300)
   - `--keep-sprite` - Preserve the Sprite VM/session after triage
   - `--setup-cmd CMD` - Setup command to run in the cloned repo (repeatable)
+  - `--provider PROVIDER` - Coding provider: claude | amp | codex | gemini
   """
 
   use Mix.Task
@@ -19,6 +20,8 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
   @shortdoc "Triage a GitHub issue with Jido.Lib"
 
   alias Jido.Lib.Github.Agents.IssueTriageBot
+
+  @supported_providers [:claude, :amp, :codex, :gemini]
 
   @doc false
   def handle_telemetry([:jido_runic, :runnable, status], _measurements, metadata, config) do
@@ -45,12 +48,13 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
 
     {opts, args, _} =
       OptionParser.parse(args,
-        strict: [timeout: :integer, keep_sprite: :boolean, setup_cmd: :keep],
-        aliases: [t: :timeout, k: :keep_sprite]
+        strict: [timeout: :integer, keep_sprite: :boolean, setup_cmd: :keep, provider: :string],
+        aliases: [t: :timeout, k: :keep_sprite, p: :provider]
       )
 
     url = List.first(args) || Mix.raise("Usage: mix jido_lib.github.triage <github_issue_url>")
     timeout = (opts[:timeout] || 300) * 1_000
+    provider = parse_provider(opts[:provider])
 
     handler_id = "jido-lib-github-triage-progress-#{System.unique_integer([:positive])}"
 
@@ -74,6 +78,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
             IssueTriageBot.triage(
               url,
               jido: Jido.Default,
+              provider: provider,
               timeout: timeout,
               keep_sprite: opts[:keep_sprite] || false,
               setup_commands: opts[:setup_cmd] || [],
@@ -97,6 +102,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
   @doc false
   def build_intake_attrs(owner, repo, number, url, opts, timeout_ms) do
     IssueTriageBot.build_intake_attrs(owner, repo, number, url,
+      provider: parse_provider(Keyword.get(opts, :provider)),
       keep_sprite: opts[:keep_sprite] || false,
       setup_cmd: opts[:setup_cmd] || [],
       timeout: timeout_ms
@@ -151,4 +157,35 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
     do: Logger.put_module_level(Jido.AgentServer, level)
 
   defp restore_agent_server_level(_), do: Logger.delete_module_level(Jido.AgentServer)
+
+  defp parse_provider(nil), do: :claude
+  defp parse_provider(provider) when provider in @supported_providers, do: provider
+
+  defp parse_provider(provider) when is_binary(provider) do
+    normalized =
+      provider
+      |> String.trim()
+      |> String.downcase()
+
+    case normalized do
+      "claude" ->
+        :claude
+
+      "amp" ->
+        :amp
+
+      "codex" ->
+        :codex
+
+      "gemini" ->
+        :gemini
+
+      _ ->
+        Mix.raise("Invalid --provider #{inspect(provider)}. Allowed: claude, amp, codex, gemini")
+    end
+  end
+
+  defp parse_provider(provider) do
+    Mix.raise("Invalid --provider #{inspect(provider)}. Allowed: claude, amp, codex, gemini")
+  end
 end

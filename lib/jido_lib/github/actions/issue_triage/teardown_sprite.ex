@@ -8,6 +8,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.TeardownSprite do
     description: "Stop Sprite session and complete triage run",
     schema: [
       run_id: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       session_id: [type: :string, required: true],
       workspace_dir: [type: :string, required: true],
       keep_sprite: [type: :boolean, default: false],

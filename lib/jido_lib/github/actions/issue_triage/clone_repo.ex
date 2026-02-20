@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.CloneRepo do
     schema: [
       owner: [type: :string, required: true],
       repo: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       workspace_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
       timeout: [type: :integer, default: 300_000],

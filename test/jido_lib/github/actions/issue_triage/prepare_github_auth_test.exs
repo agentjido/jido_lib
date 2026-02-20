@@ -29,9 +29,13 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.PrepareGithubAuthTest do
              )
 
     assert result.github_auth_ready == true
+    assert result.github_git_auth_ready == true
     commands = Jido.Lib.Test.FakeShellState.runs() |> Enum.map(&elem(&1, 1))
     assert Enum.any?(commands, &String.contains?(&1, "GH_TOKEN"))
     assert Enum.any?(commands, &String.contains?(&1, "gh auth status"))
+    assert Enum.any?(commands, &String.contains?(&1, "git config --global user.email"))
+    assert Enum.any?(commands, &String.contains?(&1, "git config --global user.name"))
+    assert Enum.any?(commands, &String.contains?(&1, "gh auth setup-git"))
   end
 
   test "fails when token check reports missing" do

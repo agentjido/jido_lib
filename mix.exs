@@ -52,12 +52,16 @@ defmodule Jido.Lib.MixProject do
       {:jido_action, github: "agentjido/jido_action", branch: "main", override: true},
       {:libgraph, github: "zblanco/libgraph", branch: "zw/multigraph-indexes", override: true},
       {:jido_shell, path: "../jido_shell", override: true},
+      {:jido_harness, path: "../jido_harness", override: true},
       {:jido_claude, path: "../jido_claude"},
+      {:jido_amp, path: "../jido_amp"},
+      {:jido_codex, path: "../jido_codex"},
+      {:jido_gemini, path: "../jido_gemini"},
       {:jido_vfs, path: "../jido_vfs", override: true},
       {:sprites, git: "https://github.com/mikehostetler/sprites-ex.git"},
 
       # Schemas & validation
-      {:zoi, "~> 0.14"},
+      {:zoi, "~> 0.17"},
 
       # Error handling
       {:splode, "~> 0.2"},

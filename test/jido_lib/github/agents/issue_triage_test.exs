@@ -36,15 +36,20 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
 
     assert {:ok, result} = IssueTriageBot.run(intake, jido: Jido.Default, timeout: 30_000)
     assert result.status == :completed
+    assert result.provider == :claude
     assert result.investigation_status == :ok
+    assert result.agent_status == :ok
     assert result.comment_posted == true
     assert result.teardown_verified == true
-    assert result.runtime_checks.gh == true
+    assert result.runtime_checks.shared.gh == true
 
     runs = Jido.Lib.Test.FakeShellState.runs()
 
     mkdir_idx = command_index(runs, "mkdir -p /work/jido-triage-run-123")
     auth_idx = command_index(runs, "gh auth status")
+    git_email_idx = command_index(runs, "git config --global user.email")
+    git_name_idx = command_index(runs, "git config --global user.name")
+    setup_git_idx = command_index(runs, "gh auth setup-git")
     fetch_idx = command_index(runs, "gh issue view 42")
     clone_idx = command_index(runs, "git clone --depth 1")
     setup_idx = command_index(runs, "mix deps.get")
@@ -53,6 +58,10 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
     comment_idx = command_index(runs, "gh issue comment 42")
 
     assert mkdir_idx < auth_idx
+    assert auth_idx < git_email_idx
+    assert git_email_idx < git_name_idx
+    assert git_name_idx < setup_git_idx
+    assert setup_git_idx < fetch_idx
     assert auth_idx < fetch_idx
     assert fetch_idx < clone_idx
     assert clone_idx < setup_idx

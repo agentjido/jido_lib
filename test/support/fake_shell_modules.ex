@@ -112,6 +112,47 @@ defmodule Jido.Lib.Test.FakeShellAgent do
           String.contains?(command, "defaultBranchRef") ->
         {:ok, "main"}
 
+      String.contains?(command, "${GH_TOKEN:-}") and
+        String.contains?(command, "${GITHUB_TOKEN:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${ANTHROPIC_AUTH_TOKEN:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${ANTHROPIC_API_KEY:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${CLAUDE_CODE_API_KEY:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${OPENAI_API_KEY:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${AMP_API_KEY:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${GEMINI_API_KEY:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${GOOGLE_API_KEY:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${GOOGLE_GENAI_USE_VERTEXAI:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
+      String.contains?(command, "${GOOGLE_GENAI_USE_GCA:-}") and
+          String.contains?(command, "echo present") ->
+        {:ok, "present"}
+
       String.contains?(command, "command -v gh") ->
         {:ok, "present"}
 
@@ -121,6 +162,15 @@ defmodule Jido.Lib.Test.FakeShellAgent do
       String.contains?(command, "command -v claude") ->
         {:ok, "present"}
 
+      String.contains?(command, "command -v amp") ->
+        {:ok, "present"}
+
+      String.contains?(command, "command -v codex") ->
+        {:ok, "present"}
+
+      String.contains?(command, "command -v gemini") ->
+        {:ok, "present"}
+
       String.contains?(command, "ANTHROPIC_BASE_URL") and
           String.contains?(command, "echo present") ->
         {:ok, "present"}
@@ -128,6 +178,36 @@ defmodule Jido.Lib.Test.FakeShellAgent do
       String.contains?(command, "CLAUDE_CODE_API_KEY") and
           String.contains?(command, "ANTHROPIC_AUTH_TOKEN") ->
         {:ok, "ANTHROPIC_AUTH_TOKEN"}
+
+      String.contains?(command, "gh auth status") ->
+        {:ok, "authenticated"}
+
+      String.contains?(command, "gh auth setup-git") ->
+        {:ok, "configured"}
+
+      String.contains?(command, "gh api user --jq .login") ->
+        {:ok, "testuser"}
+
+      String.contains?(command, "claude --help") ->
+        {:ok, "--output-format stream-json --include-partial-messages"}
+
+      String.contains?(command, "amp --help") ->
+        {:ok, "--execute --stream-json --dangerously-allow-all"}
+
+      String.contains?(command, "codex --help") ->
+        {:ok, "codex exec --json --full-auto"}
+
+      String.contains?(command, "codex exec --help") ->
+        {:ok, "exec --json"}
+
+      String.contains?(command, "gemini --help") ->
+        {:ok, "--output-format stream-json --approval-mode"}
+
+      String.contains?(command, "codex login --with-api-key") ->
+        {:ok, "ok"}
+
+      String.contains?(command, "codex login status") ->
+        {:ok, "ok"}
 
       String.contains?(command, "gh issue view") ->
         {:ok,

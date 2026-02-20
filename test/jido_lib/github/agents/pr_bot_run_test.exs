@@ -6,6 +6,11 @@ defmodule Jido.Lib.Github.Agents.PrBotRunTest do
   setup_all do
     {:ok, _} = Application.ensure_all_started(:jido)
 
+    case Jido.start(name: Jido.PrBotRunTest) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+    end
+
     :ok
   end
 
@@ -51,6 +56,8 @@ defmodule Jido.Lib.Github.Agents.PrBotRunTest do
     }
 
     assert {:ok, result} = PrBot.run(intake, jido: Jido.PrBotRunTest, timeout: 60_000)
+    assert result.provider == :claude
+    assert result.agent_status == :ok
     assert result.pr_created == true
     assert result.pr_url == "https://github.com/test/repo/pull/7"
     assert result.issue_comment_posted == true
@@ -58,6 +65,7 @@ defmodule Jido.Lib.Github.Agents.PrBotRunTest do
 
     runs = Jido.Lib.Test.FakeShellState.runs()
 
+    setup_git_idx = command_index(runs, "gh auth setup-git")
     branch_idx = command_index(runs, "git checkout -b jido/prbot/issue-42-run-123")
     claude_idx = command_index(runs, "claude -p")
     checks_idx = command_index(runs, "&& mix compile")
@@ -65,6 +73,7 @@ defmodule Jido.Lib.Github.Agents.PrBotRunTest do
     pr_idx = command_index(runs, "gh pr create")
     comment_idx = command_index(runs, "gh issue comment 42")
 
+    assert setup_git_idx < branch_idx
     assert branch_idx < claude_idx
     assert claude_idx < checks_idx
     assert checks_idx < push_idx

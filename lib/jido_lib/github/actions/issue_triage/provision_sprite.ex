@@ -15,6 +15,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ProvisionSprite do
       keep_workspace: [type: :boolean, default: false],
       keep_sprite: [type: :boolean, default: false],
       issue_url: [type: {:or, [:string, nil]}, default: nil],
+      provider: [type: :atom, default: :claude],
       timeout: [type: :integer, default: 300_000],
       prompt: [type: {:or, [:string, nil]}, default: nil],
       sprite_config: [type: :map, required: true],

@@ -7,6 +7,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.RunChecks do
     name: "run_checks",
     description: "Run required PR gate checks in repo",
     schema: [
+      provider: [type: :atom, default: :claude],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
       check_commands: [type: {:list, :string}, default: []],

@@ -51,13 +51,14 @@ defmodule Mix.Tasks.JidoLib.Github.TriageTest do
         "jido",
         42,
         "https://github.com/agentjido/jido/issues/42",
-        [keep_sprite: true, setup_cmd: ["mix deps.get"]],
+        [keep_sprite: true, setup_cmd: ["mix deps.get"], provider: :codex],
         300_000
       )
 
     assert attrs.owner == "agentjido"
     assert attrs.repo == "jido"
     assert attrs.issue_number == 42
+    assert attrs.provider == :codex
     assert attrs.keep_sprite == true
     assert attrs.setup_commands == ["mix deps.get"]
     assert attrs.sprite_config.token == "spr-token"

@@ -9,6 +9,9 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnvTest do
     "ANTHROPIC_AUTH_TOKEN",
     "ANTHROPIC_API_KEY",
     "CLAUDE_CODE_API_KEY",
+    "OPENAI_API_KEY",
+    "AMP_API_KEY",
+    "GEMINI_API_KEY",
     "GH_TOKEN",
     "GITHUB_TOKEN",
     "ANTHROPIC_DEFAULT_SONNET_MODEL"
@@ -38,13 +41,15 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnvTest do
     assert :ok == ValidateHostEnv.validate_host_env!()
   end
 
-  test "validate_host_env!/0 fails when base url is missing" do
+  test "validate_host_env!/0 fails when provider auth env is missing" do
     System.put_env("SPRITES_TOKEN", "spr-token")
     System.delete_env("ANTHROPIC_BASE_URL")
-    System.put_env("ANTHROPIC_API_KEY", "api-key")
+    System.delete_env("ANTHROPIC_AUTH_TOKEN")
+    System.delete_env("ANTHROPIC_API_KEY")
+    System.delete_env("CLAUDE_CODE_API_KEY")
     System.put_env("GH_TOKEN", "gh-token")
 
-    assert_raise RuntimeError, ~r/ANTHROPIC_BASE_URL/, fn ->
+    assert_raise RuntimeError, ~r/requires at least one of/, fn ->
       ValidateHostEnv.validate_host_env!()
     end
   end

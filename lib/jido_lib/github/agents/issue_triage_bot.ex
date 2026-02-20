@@ -9,12 +9,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
 
   use Jido.Agent,
     name: "github_issue_triage_bot",
-    strategy:
-      {Jido.Runic.Strategy,
-       workflow_fn: &__MODULE__.build_workflow/0,
-       child_modules: %{
-         claude_sprite: Jido.Lib.Github.Agents.ClaudeSpriteAgent
-       }},
+    strategy: {Jido.Runic.Strategy, workflow_fn: &__MODULE__.build_workflow/0},
     schema: []
 
   alias Jido.Agent.Strategy.State, as: StratState
@@ -22,12 +17,12 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
   alias Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv
   alias Jido.Lib.Github.IssueTriage.SpriteTeardown
   alias Jido.Lib.Github.Schema.IssueTriage.Result
-  alias Jido.Runic.ActionNode
   alias Runic.Workflow
 
   @default_timeout_ms 300_000
   @await_buffer_ms 60_000
   @delta_log_every 200
+  @supported_providers [:claude, :amp, :codex, :gemini]
 
   @type triage_response :: %{
           issue_url: String.t(),
@@ -46,16 +41,9 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
   @spec plugin_specs() :: [Jido.Plugin.Spec.t()]
   def plugin_specs, do: []
 
-  @doc "Build the sprite triage DAG with delegated Claude execution."
+  @doc "Build the sprite triage DAG with provider-neutral coding execution."
   @spec build_workflow() :: Workflow.t()
   def build_workflow do
-    claude_node =
-      ActionNode.new(IssueTriage.Claude, %{},
-        name: :claude,
-        executor: {:child, :claude_sprite},
-        exec_opts: [max_retries: 0]
-      )
-
     Workflow.new(name: :github_issue_triage_bot)
     |> Workflow.add(IssueTriage.ValidateHostEnv)
     |> Workflow.add(IssueTriage.ProvisionSprite, to: :validate_host_env)
@@ -64,8 +52,9 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
     |> Workflow.add(IssueTriage.CloneRepo, to: :fetch_issue)
     |> Workflow.add(IssueTriage.SetupRepo, to: :clone_repo)
     |> Workflow.add(IssueTriage.ValidateRuntime, to: :setup_repo)
-    |> Workflow.add(claude_node, to: :validate_runtime)
-    |> Workflow.add(IssueTriage.CommentIssue, to: :claude)
+    |> Workflow.add(IssueTriage.PrepareProviderRuntime, to: :validate_runtime)
+    |> Workflow.add(IssueTriage.RunCodingAgent, to: :prepare_provider_runtime)
+    |> Workflow.add(IssueTriage.CommentIssue, to: :run_coding_agent)
     |> Workflow.add(IssueTriage.TeardownSprite, to: :comment_issue)
   end
 
@@ -81,6 +70,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
 
     intake =
       build_intake(issue_url,
+        provider: Keyword.get(opts, :provider, :claude),
         timeout: timeout,
         keep_sprite: Keyword.get(opts, :keep_sprite, false),
         setup_commands: Keyword.get(opts, :setup_commands, []),
@@ -182,6 +172,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
   def build_intake_attrs(owner, repo, issue_number, issue_url, opts \\ [])
       when is_binary(owner) and is_binary(repo) and is_integer(issue_number) and
              is_binary(issue_url) and is_list(opts) do
+    provider = normalize_provider(Keyword.get(opts, :provider, :claude))
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
     run_id = normalize_run_id(Keyword.get(opts, :run_id))
     setup_commands = Keyword.get(opts, :setup_commands, Keyword.get(opts, :setup_cmd, []))
@@ -195,11 +186,12 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
           %{
             token: System.get_env("SPRITES_TOKEN"),
             create: true,
-            env: ValidateHostEnv.build_sprite_env()
+            env: ValidateHostEnv.build_sprite_env(provider)
           }
       end
 
     %{
+      provider: provider,
       owner: owner,
       repo: repo,
       issue_number: issue_number,
@@ -404,6 +396,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
     %{
       status: final[:status] || :completed,
       run_id: final[:run_id] || map_get(intake, :run_id),
+      provider: final[:provider] || map_get(intake, :provider, :claude),
       owner: final[:owner] || map_get(intake, :owner),
       repo: final[:repo] || map_get(intake, :repo),
       issue_number: final[:issue_number] || map_get(intake, :issue_number),
@@ -411,6 +404,9 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
       investigation: final[:investigation],
       investigation_status: final[:investigation_status],
       investigation_error: final[:investigation_error],
+      agent_status: final[:agent_status],
+      agent_summary: final[:agent_summary],
+      agent_error: final[:agent_error],
       comment_posted: final[:comment_posted],
       comment_url: final[:comment_url],
       comment_error: final[:comment_error],
@@ -582,41 +578,38 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
     end
   end
 
-  defp print_signal(shell, "jido.lib.github.issue_triage.claude_probe.event", data, delta_count) do
+  defp print_signal(shell, "jido.lib.github.issue_triage.coding_agent.event", data, delta_count) do
     event = map_get(data, :event, %{})
-    kind = map_get(data, :event_kind, "unknown")
+    event_type = map_get(data, :event_type, map_get(event, :type, "unknown"))
+    next = delta_count + 1
 
-    case kind do
-      "stream:content_block_delta" ->
-        next = delta_count + 1
-
-        if rem(next, @delta_log_every) == 0 do
-          shell.info("[Claude] content deltas=#{next}")
-        end
-
-        next
-
-      "stream:content_block_start" ->
-        maybe_log_tool_start(shell, event)
-        delta_count
-
-      "result" ->
-        shell.info("[Claude] result #{result_summary(event)}")
-        delta_count
-
-      "system" ->
-        shell.info("[Claude] init #{system_summary(event)}")
-        delta_count
-
-      _ ->
-        delta_count
+    if rem(next, @delta_log_every) == 0 do
+      shell.info("[CodingAgent] events=#{next}")
     end
+
+    if event_type in ["stream_event", "content_block_start"] do
+      maybe_log_tool_start(shell, event)
+    end
+
+    if event_type == "result" do
+      shell.info("[CodingAgent] result #{result_summary(event)}")
+    end
+
+    if event_type == "system" do
+      shell.info("[CodingAgent] init #{system_summary(event)}")
+    end
+
+    next
   end
 
   defp print_signal(shell, type, data, delta_count) do
     cond do
+      String.starts_with?(type, "jido.lib.github.issue_triage.coding_agent.") ->
+        print_coding_agent_signal(shell, type, data)
+        delta_count
+
       String.starts_with?(type, "jido.lib.github.issue_triage.claude_probe.") ->
-        print_claude_signal(shell, type, data)
+        print_legacy_claude_signal(shell, type, data)
         delta_count
 
       String.starts_with?(type, "jido.lib.github.issue_triage.delegate.") ->
@@ -632,39 +625,67 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
     end
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.issue_triage.claude_probe.started", data) do
-    shell.info("[Claude] started #{claude_signal_context(data)}")
+  defp print_coding_agent_signal(shell, "jido.lib.github.issue_triage.coding_agent.started", data) do
+    shell.info("[CodingAgent] started #{coding_agent_signal_context(data)}")
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.issue_triage.claude_probe.mode", data) do
+  defp print_coding_agent_signal(shell, "jido.lib.github.issue_triage.coding_agent.mode", data) do
     mode = map_get(data, :mode, "unknown")
-    shell.info("[Claude] mode=#{mode}")
+    provider = map_get(data, :provider, "unknown")
+    shell.info("[CodingAgent] provider=#{provider} mode=#{mode}")
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.issue_triage.claude_probe.heartbeat", data) do
+  defp print_coding_agent_signal(
+         shell,
+         "jido.lib.github.issue_triage.coding_agent.heartbeat",
+         data
+       ) do
     idle_ms = map_get(data, :idle_ms, 0)
-    shell.info("[Claude] heartbeat idle_ms=#{idle_ms}")
+    shell.info("[CodingAgent] heartbeat idle_ms=#{idle_ms}")
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.issue_triage.claude_probe.completed", data) do
+  defp print_coding_agent_signal(
+         shell,
+         "jido.lib.github.issue_triage.coding_agent.completed",
+         data
+       ) do
     events = map_get(data, :event_count, 0)
-    bytes = map_get(data, :investigation_bytes, 0)
-    shell.info("[Claude] completed events=#{events} bytes=#{bytes}")
+    bytes = map_get(data, :summary_bytes, 0)
+    shell.info("[CodingAgent] completed events=#{events} bytes=#{bytes}")
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.issue_triage.claude_probe.failed", data) do
+  defp print_coding_agent_signal(shell, "jido.lib.github.issue_triage.coding_agent.failed", data) do
     error = map_get(data, :error, "unknown")
-    shell.info("[Claude] failed error=#{error}")
+    shell.info("[CodingAgent] failed error=#{error}")
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.issue_triage.claude_probe.raw_line", data) do
-    shell.info("[Claude][raw] #{map_get(data, :line, "")}")
+  defp print_coding_agent_signal(
+         shell,
+         "jido.lib.github.issue_triage.coding_agent.raw_line",
+         data
+       ) do
+    shell.info("[CodingAgent][raw] #{map_get(data, :line, "")}")
   end
 
-  defp print_claude_signal(_shell, "jido.lib.github.issue_triage.claude_probe.event", _data),
-    do: :ok
+  defp print_coding_agent_signal(
+         _shell,
+         "jido.lib.github.issue_triage.coding_agent.event",
+         _data
+       ),
+       do: :ok
 
-  defp print_claude_signal(_shell, _type, _data), do: :ok
+  defp print_coding_agent_signal(_shell, _type, _data), do: :ok
+
+  defp print_legacy_claude_signal(shell, type, data) do
+    translated =
+      type
+      |> String.replace_prefix(
+        "jido.lib.github.issue_triage.claude_probe.",
+        "jido.lib.github.issue_triage.coding_agent."
+      )
+
+    print_coding_agent_signal(shell, translated, data)
+  end
 
   defp print_delegate_signal(shell, type, data) do
     suffix = String.replace_prefix(type, "jido.lib.github.issue_triage.delegate.", "")
@@ -676,18 +697,32 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
 
   defp runtime_summary(data) do
     checks = map_get(data, :runtime_checks, %{})
-    gh = map_get(checks, :gh, false)
-    git = map_get(checks, :git, false)
-    claude = map_get(checks, :claude, false)
-    base = map_get(checks, :base_url_present, false)
-    auth = map_get(checks, :auth_source, "unknown")
-    "gh=#{gh} git=#{git} claude=#{claude} base_url=#{base} auth=#{auth}"
+    shared = map_get(checks, :shared, checks)
+    provider_checks = map_get(checks, :provider, %{})
+    provider_name = map_get(checks, :provider_name, map_get(data, :provider, "unknown"))
+    tools = map_get(provider_checks, :tools, %{})
+    probes = map_get(provider_checks, :probes, [])
+
+    tools_ok =
+      case tools do
+        map when is_map(map) -> Enum.all?(map, fn {_tool, present?} -> present? == true end)
+        _ -> false
+      end
+
+    probes_ok =
+      case probes do
+        list when is_list(list) -> Enum.all?(list, &(map_get(&1, :pass?, false) == true))
+        _ -> false
+      end
+
+    "gh=#{map_get(shared, :gh, false)} git=#{map_get(shared, :git, false)} token=#{map_get(shared, :github_token_visible, false)} auth=#{map_get(shared, :gh_auth, false)} provider=#{provider_name} tools_ok=#{tools_ok} probes_ok=#{probes_ok}"
   end
 
-  defp claude_signal_context(data) do
+  defp coding_agent_signal_context(data) do
     issue_number = map_get(data, :issue_number, "?")
     session_id = map_get(data, :session_id, "")
-    "issue=#{issue_number} session=#{session_id}"
+    provider = map_get(data, :provider, "unknown")
+    "issue=#{issue_number} provider=#{provider} session=#{session_id}"
   end
 
   defp maybe_log_tool_start(shell, event) when is_map(event) do
@@ -717,6 +752,23 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
   end
 
   defp system_summary(_event), do: "model=unknown"
+
+  defp normalize_provider(provider) when provider in @supported_providers, do: provider
+
+  defp normalize_provider(provider) when is_binary(provider) do
+    provider
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "claude" -> :claude
+      "amp" -> :amp
+      "codex" -> :codex
+      "gemini" -> :gemini
+      _ -> :claude
+    end
+  end
+
+  defp normalize_provider(_), do: :claude
 
   defp map_get(map, key, default \\ nil) when is_map(map) and is_atom(key) do
     case Map.fetch(map, key) do

@@ -41,14 +41,19 @@ result =
 ```bash
 mix jido_lib.github.pr https://github.com/owner/repo/issues/42
 mix jido_lib.github.triage https://github.com/owner/repo/issues/42
+mix jido_lib.github.pr https://github.com/owner/repo/issues/42 --provider codex
+mix jido_lib.github.triage https://github.com/owner/repo/issues/42 --provider gemini
 ```
 
 ## Required Environment
 
 - `SPRITES_TOKEN`
-- `ANTHROPIC_BASE_URL`
-- one of `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_API_KEY`
 - `GH_TOKEN` or `GITHUB_TOKEN`
+- provider-specific API/auth env:
+  - Claude: one of `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_API_KEY`, `CLAUDE_CODE_API_KEY`
+  - Amp: `AMP_API_KEY`
+  - Codex: `OPENAI_API_KEY`
+  - Gemini: one of `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_GENAI_USE_GCA`
 
 ## Workflow Documentation
 
@@ -60,7 +65,7 @@ Detailed workflow spec:
 ## Notes
 
 - Workflow is sprite-first.
-- Runtime validation runs before Claude.
+- Runtime validation runs before provider execution.
 - Teardown is retry + verify, with warnings if verification fails.
 - Generic shell backend abstractions are intentionally not part of `jido_lib`.
 

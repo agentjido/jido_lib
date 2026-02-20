@@ -43,11 +43,22 @@ defmodule Jido.Lib.Github.Agents.PrBotIntakeTest do
     assert intake.owner == "agentjido"
     assert intake.repo == "jido_chat"
     assert intake.issue_number == 19
+    assert intake.provider == :claude
     assert intake.keep_sprite == true
     assert intake.setup_commands == ["mix deps.get"]
     assert intake.check_commands == ["mix test --exclude integration"]
     assert intake.branch_prefix == "jido/prbot"
     assert intake.sprite_config.token == "spr-token"
+  end
+
+  test "build_intake/2 accepts provider override" do
+    intake =
+      PrBot.build_intake(
+        "https://github.com/agentjido/jido_chat/issues/19",
+        provider: :gemini
+      )
+
+    assert intake.provider == :gemini
   end
 
   test "intake_signal/1 wraps payload in runic.feed signal" do

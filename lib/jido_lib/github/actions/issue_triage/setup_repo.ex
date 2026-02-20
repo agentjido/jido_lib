@@ -7,6 +7,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.SetupRepo do
     name: "setup_repo",
     description: "Run setup commands in the cloned repository",
     schema: [
+      provider: [type: :atom, default: :claude],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
       setup_commands: [type: {:list, :string}, default: []],

@@ -9,9 +9,10 @@
 3. fetches issue context in-sprite
 4. clones and prepares the repo in-sprite
 5. validates runtime/tooling/env
-6. runs Claude for investigation
-7. comments findings on the issue
-8. tears down (or preserves) the sprite
+6. prepares provider runtime (install/auth bootstrap as needed)
+7. runs selected coding provider for investigation
+8. comments findings on the issue
+9. tears down (or preserves) the sprite
 
 The canonical API is `Jido.Lib.Github.Agents.IssueTriageBot.triage/2`.
 
@@ -24,15 +25,17 @@ The canonical API is `Jido.Lib.Github.Agents.IssueTriageBot.triage/2`.
 5. `CloneRepo`
 6. `SetupRepo`
 7. `ValidateRuntime`
-8. `Claude` (delegated to child agent)
-9. `CommentIssue`
-10. `TeardownSprite`
+8. `PrepareProviderRuntime`
+9. `RunCodingAgent`
+10. `CommentIssue`
+11. `TeardownSprite`
 
 ## Inputs
 
 The intake signal carries a plain payload map (no public request struct requirement):
 
 - `issue_url`
+- `provider` (`:claude | :amp | :codex | :gemini`, default `:claude`)
 - `run_id`
 - `timeout`
 - `keep_sprite`
@@ -60,7 +63,8 @@ The workflow returns a `Jido.Lib.Github.Schema.IssueTriage.Result` with:
    - `CloneRepo`
    - `SetupRepo`
    - `ValidateRuntime`
-2. `Claude` failure is captured and workflow continues to comment + teardown.
+   - `PrepareProviderRuntime`
+2. `RunCodingAgent` failure is captured and workflow continues to comment + teardown.
 3. `CommentIssue` failure is captured and workflow continues to teardown.
 4. `TeardownSprite` uses retry+verify; non-verified teardown returns warnings.
 
@@ -68,10 +72,10 @@ The workflow returns a `Jido.Lib.Github.Schema.IssueTriage.Result` with:
 
 Runtime observability signals:
 
-- `jido.lib.github.issue_triage.claude_probe.*`
+- `jido.lib.github.issue_triage.coding_agent.*`
 - `jido.lib.github.issue_triage.delegate.*`
 - `jido.lib.github.issue_triage.validate_runtime.checked`
 
 ## Canonical Command
 
-- `mix jido_lib.github.triage <issue_url>`
+- `mix jido_lib.github.triage <issue_url> [--provider claude|amp|codex|gemini]`

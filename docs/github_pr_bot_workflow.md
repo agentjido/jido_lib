@@ -9,17 +9,18 @@
 3. fetch issue context in-sprite
 4. clone and set up the target repo
 5. validate runtime/tooling/env
-6. create a working branch
-7. run Claude to implement + commit changes
-8. verify commit state and run required checks
-9. push branch and create/reuse PR
-10. comment issue with PR URL
-11. teardown (or preserve) sprite
+6. prepare provider runtime (install/auth bootstrap as needed)
+7. create a working branch
+8. run selected coding provider to implement + commit changes
+9. verify commit state and run required checks
+10. push branch and create/reuse PR
+11. comment issue with PR URL
+12. teardown (or preserve) sprite
 
 ## Canonical Command
 
 ```bash
-mix jido_lib.github.pr <github_issue_url>
+mix jido_lib.github.pr <github_issue_url> [--provider claude|amp|codex|gemini]
 ```
 
 Example:
@@ -33,6 +34,7 @@ mix jido_lib.github.pr https://github.com/agentjido/jido_chat/issues/19
 Intake payload keys:
 
 - `issue_url` (required)
+- `provider` (default: `:claude`)
 - `timeout` (default: `900_000`)
 - `keep_sprite` (default: `false`)
 - `setup_commands` (default: `[]`)
@@ -63,8 +65,9 @@ Hard gates:
 - `CloneRepo`
 - `SetupRepo`
 - `ValidateRuntime`
+- `PrepareProviderRuntime`
 - `EnsureBranch`
-- `ClaudeCode`
+- `RunCodingAgent`
 - `EnsureCommit`
 - `RunChecks`
 - `PushBranch`

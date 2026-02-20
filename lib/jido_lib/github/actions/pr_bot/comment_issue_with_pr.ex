@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.CommentIssueWithPr do
     schema: [
       owner: [type: :string, required: true],
       repo: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       issue_number: [type: :integer, required: true],
       run_id: [type: :string, required: true],
       session_id: [type: :string, required: true],

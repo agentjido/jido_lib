@@ -34,6 +34,7 @@ defmodule Mix.Tasks.JidoLib.Github.PrTest do
     intake =
       Pr.build_intake(
         "https://github.com/agentjido/jido_chat/issues/19",
+        provider: :amp,
         keep_sprite: true,
         setup_commands: ["mix deps.get"],
         check_commands: ["mix test --exclude integration"],
@@ -43,6 +44,7 @@ defmodule Mix.Tasks.JidoLib.Github.PrTest do
     assert intake.owner == "agentjido"
     assert intake.repo == "jido_chat"
     assert intake.issue_number == 19
+    assert intake.provider == :amp
     assert intake.keep_sprite == true
     assert intake.setup_commands == ["mix deps.get"]
     assert intake.check_commands == ["mix test --exclude integration"]

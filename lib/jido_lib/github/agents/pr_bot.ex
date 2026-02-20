@@ -10,10 +10,7 @@ defmodule Jido.Lib.Github.Agents.PrBot do
 
   use Jido.Agent,
     name: "github_pr_bot",
-    strategy:
-      {Jido.Runic.Strategy,
-       workflow_fn: &__MODULE__.build_workflow/0,
-       child_modules: %{claude_sprite: Jido.Lib.Github.Agents.ClaudeSpriteAgent}},
+    strategy: {Jido.Runic.Strategy, workflow_fn: &__MODULE__.build_workflow/0},
     schema: []
 
   alias Jido.Agent.Strategy.State, as: StratState
@@ -21,30 +18,23 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   alias Jido.Lib.Github.Actions.IssueTriage.ValidateHostEnv
   alias Jido.Lib.Github.Actions.PrBot, as: PrActions
   alias Jido.Lib.Github.IssueTriage.SpriteTeardown
-  alias Jido.Runic.ActionNode
   alias Runic.Workflow
 
   @default_timeout_ms 900_000
   @await_buffer_ms 60_000
   @default_check_commands ["mix test --exclude integration"]
   @delta_log_every 200
+  @supported_providers [:claude, :amp, :codex, :gemini]
 
   @doc false
   @spec plugin_specs() :: [Jido.Plugin.Spec.t()]
   def plugin_specs, do: []
 
   @doc """
-  Build the PR workflow graph with delegated Claude coding.
+  Build the PR workflow graph with provider-neutral coding execution.
   """
   @spec build_workflow() :: Workflow.t()
   def build_workflow do
-    claude_node =
-      ActionNode.new(PrActions.ClaudeCode, %{},
-        name: :claude_code,
-        executor: {:child, :claude_sprite},
-        exec_opts: [max_retries: 0]
-      )
-
     Workflow.new(name: :github_pr_bot)
     |> Workflow.add(IssueTriage.ValidateHostEnv)
     |> Workflow.add(IssueTriage.ProvisionSprite, to: :validate_host_env)
@@ -53,9 +43,10 @@ defmodule Jido.Lib.Github.Agents.PrBot do
     |> Workflow.add(IssueTriage.CloneRepo, to: :fetch_issue)
     |> Workflow.add(IssueTriage.SetupRepo, to: :clone_repo)
     |> Workflow.add(IssueTriage.ValidateRuntime, to: :setup_repo)
-    |> Workflow.add(PrActions.EnsureBranch, to: :validate_runtime)
-    |> Workflow.add(claude_node, to: :ensure_branch)
-    |> Workflow.add(PrActions.EnsureCommit, to: :claude_code)
+    |> Workflow.add(IssueTriage.PrepareProviderRuntime, to: :validate_runtime)
+    |> Workflow.add(PrActions.EnsureBranch, to: :prepare_provider_runtime)
+    |> Workflow.add(PrActions.RunCodingAgent, to: :ensure_branch)
+    |> Workflow.add(PrActions.EnsureCommit, to: :run_coding_agent)
     |> Workflow.add(PrActions.RunChecks, to: :ensure_commit)
     |> Workflow.add(PrActions.PushBranch, to: :run_checks)
     |> Workflow.add(PrActions.CreatePullRequest, to: :push_branch)
@@ -75,6 +66,7 @@ defmodule Jido.Lib.Github.Agents.PrBot do
 
     intake =
       build_intake(issue_url,
+        provider: Keyword.get(opts, :provider, :claude),
         timeout: timeout,
         keep_sprite: Keyword.get(opts, :keep_sprite, false),
         keep_workspace: Keyword.get(opts, :keep_workspace, false),
@@ -154,6 +146,7 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   @spec build_intake(String.t(), keyword()) :: map()
   def build_intake(issue_url, opts \\ []) when is_binary(issue_url) and is_list(opts) do
     {owner, repo, issue_number} = parse_issue_url(issue_url)
+    provider = normalize_provider(Keyword.get(opts, :provider, :claude))
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
     run_id = normalize_run_id(Keyword.get(opts, :run_id))
 
@@ -166,11 +159,12 @@ defmodule Jido.Lib.Github.Agents.PrBot do
           %{
             token: System.get_env("SPRITES_TOKEN"),
             create: true,
-            env: ValidateHostEnv.build_sprite_env()
+            env: ValidateHostEnv.build_sprite_env(provider)
           }
       end
 
     %{
+      provider: provider,
       issue_url: issue_url,
       owner: owner,
       repo: repo,
@@ -298,9 +292,12 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   end
 
   defp to_result_map(intake, final, productions) when is_map(intake) and is_map(final) do
+    provider = result_value(final, productions, :provider, map_get(intake, :provider, :claude))
+
     %{
       status: result_value(final, productions, :status, :completed),
       run_id: result_value(final, productions, :run_id, map_get(intake, :run_id)),
+      provider: provider,
       owner: result_value(final, productions, :owner, map_get(intake, :owner)),
       repo: result_value(final, productions, :repo, map_get(intake, :repo)),
       issue_number:
@@ -308,6 +305,29 @@ defmodule Jido.Lib.Github.Agents.PrBot do
       issue_url: result_value(final, productions, :issue_url, map_get(intake, :issue_url)),
       base_branch: result_value(final, productions, :base_branch, map_get(intake, :base_branch)),
       branch_name: result_value(final, productions, :branch_name, nil),
+      agent_status: result_value(final, productions, :agent_status, nil),
+      agent_summary: result_value(final, productions, :agent_summary, nil),
+      agent_error: result_value(final, productions, :agent_error, nil),
+      claude_status:
+        result_value(
+          final,
+          productions,
+          :claude_status,
+          if(provider == :claude,
+            do: result_value(final, productions, :agent_status, nil),
+            else: nil
+          )
+        ),
+      claude_summary:
+        result_value(
+          final,
+          productions,
+          :claude_summary,
+          if(provider == :claude,
+            do: result_value(final, productions, :agent_summary, nil),
+            else: nil
+          )
+        ),
       commit_sha: result_value(final, productions, :commit_sha, nil),
       checks_passed: result_value(final, productions, :checks_passed, nil),
       check_results: result_value(final, productions, :check_results, nil),
@@ -345,12 +365,18 @@ defmodule Jido.Lib.Github.Agents.PrBot do
     %{
       status: :failed,
       run_id: map_get(intake, :run_id),
+      provider: map_get(intake, :provider, :claude),
       owner: map_get(intake, :owner),
       repo: map_get(intake, :repo),
       issue_number: map_get(intake, :issue_number),
       issue_url: map_get(intake, :issue_url),
       base_branch: map_get(intake, :base_branch),
       branch_name: nil,
+      agent_status: nil,
+      agent_summary: nil,
+      agent_error: nil,
+      claude_status: nil,
+      claude_summary: nil,
       commit_sha: nil,
       checks_passed: nil,
       check_results: nil,
@@ -585,41 +611,38 @@ defmodule Jido.Lib.Github.Agents.PrBot do
     end
   end
 
-  defp print_signal(shell, "jido.lib.github.pr_bot.claude.event", data, delta_count) do
-    event_kind = map_get(data, :event_kind, "unknown")
+  defp print_signal(shell, "jido.lib.github.pr_bot.coding_agent.event", data, delta_count) do
+    event_type = map_get(data, :event_type, "unknown")
     event = map_get(data, :event, %{})
+    next = delta_count + 1
 
-    case event_kind do
-      "stream:content_block_delta" ->
-        next = delta_count + 1
-
-        if rem(next, @delta_log_every) == 0 do
-          shell.info("[PrBot][Claude] deltas=#{next}")
-        end
-
-        next
-
-      "stream:content_block_start" ->
-        maybe_log_tool_start(shell, event)
-        delta_count
-
-      "result" ->
-        shell.info("[PrBot][Claude] result #{result_summary(event)}")
-        delta_count
-
-      "system" ->
-        shell.info("[PrBot][Claude] init #{system_summary(event)}")
-        delta_count
-
-      _ ->
-        delta_count
+    if rem(next, @delta_log_every) == 0 do
+      shell.info("[PrBot][CodingAgent] events=#{next}")
     end
+
+    if event_type in ["stream_event", "content_block_start"] do
+      maybe_log_tool_start(shell, event)
+    end
+
+    if event_type == "result" do
+      shell.info("[PrBot][CodingAgent] result #{result_summary(event)}")
+    end
+
+    if event_type == "system" do
+      shell.info("[PrBot][CodingAgent] init #{system_summary(event)}")
+    end
+
+    next
   end
 
   defp print_signal(shell, type, data, delta_count) do
     cond do
+      String.starts_with?(type, "jido.lib.github.pr_bot.coding_agent.") ->
+        print_coding_agent_signal(shell, type, data)
+        delta_count
+
       String.starts_with?(type, "jido.lib.github.pr_bot.claude.") ->
-        print_claude_signal(shell, type, data)
+        print_legacy_claude_signal(shell, type, data)
         delta_count
 
       String.starts_with?(type, "jido.lib.github.issue_triage.delegate.") ->
@@ -635,33 +658,52 @@ defmodule Jido.Lib.Github.Agents.PrBot do
     end
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.pr_bot.claude.started", data) do
-    shell.info("[PrBot][Claude] started issue=#{map_get(data, :issue_number, "?")}")
-  end
+  defp print_coding_agent_signal(shell, "jido.lib.github.pr_bot.coding_agent.started", data) do
+    provider = map_get(data, :provider, "unknown")
 
-  defp print_claude_signal(shell, "jido.lib.github.pr_bot.claude.mode", data) do
-    shell.info("[PrBot][Claude] mode=#{map_get(data, :mode, "unknown")}")
-  end
-
-  defp print_claude_signal(shell, "jido.lib.github.pr_bot.claude.heartbeat", data) do
-    shell.info("[PrBot][Claude] heartbeat idle_ms=#{map_get(data, :idle_ms, 0)}")
-  end
-
-  defp print_claude_signal(shell, "jido.lib.github.pr_bot.claude.completed", data) do
     shell.info(
-      "[PrBot][Claude] completed events=#{map_get(data, :event_count, 0)} bytes=#{map_get(data, :summary_bytes, 0)}"
+      "[PrBot][CodingAgent] provider=#{provider} started issue=#{map_get(data, :issue_number, "?")}"
     )
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.pr_bot.claude.failed", data) do
-    shell.info("[PrBot][Claude] failed error=#{map_get(data, :error, "unknown")}")
+  defp print_coding_agent_signal(shell, "jido.lib.github.pr_bot.coding_agent.mode", data) do
+    provider = map_get(data, :provider, "unknown")
+
+    shell.info(
+      "[PrBot][CodingAgent] provider=#{provider} mode=#{map_get(data, :mode, "unknown")}"
+    )
   end
 
-  defp print_claude_signal(shell, "jido.lib.github.pr_bot.claude.raw_line", data) do
-    shell.info("[PrBot][Claude][raw] #{map_get(data, :line, "")}")
+  defp print_coding_agent_signal(shell, "jido.lib.github.pr_bot.coding_agent.heartbeat", data) do
+    shell.info("[PrBot][CodingAgent] heartbeat idle_ms=#{map_get(data, :idle_ms, 0)}")
   end
 
-  defp print_claude_signal(_shell, _type, _data), do: :ok
+  defp print_coding_agent_signal(shell, "jido.lib.github.pr_bot.coding_agent.completed", data) do
+    shell.info(
+      "[PrBot][CodingAgent] completed events=#{map_get(data, :event_count, 0)} bytes=#{map_get(data, :summary_bytes, 0)}"
+    )
+  end
+
+  defp print_coding_agent_signal(shell, "jido.lib.github.pr_bot.coding_agent.failed", data) do
+    shell.info("[PrBot][CodingAgent] failed error=#{map_get(data, :error, "unknown")}")
+  end
+
+  defp print_coding_agent_signal(shell, "jido.lib.github.pr_bot.coding_agent.raw_line", data) do
+    shell.info("[PrBot][CodingAgent][raw] #{map_get(data, :line, "")}")
+  end
+
+  defp print_coding_agent_signal(_shell, _type, _data), do: :ok
+
+  defp print_legacy_claude_signal(shell, type, data) do
+    translated =
+      type
+      |> String.replace_prefix(
+        "jido.lib.github.pr_bot.claude.",
+        "jido.lib.github.pr_bot.coding_agent."
+      )
+
+    print_coding_agent_signal(shell, translated, data)
+  end
 
   defp print_delegate_signal(shell, type, data) do
     suffix = String.replace_prefix(type, "jido.lib.github.issue_triage.delegate.", "")
@@ -672,13 +714,30 @@ defmodule Jido.Lib.Github.Agents.PrBot do
 
   defp runtime_summary(data) do
     checks = map_get(data, :runtime_checks, %{})
+    shared = map_get(checks, :shared, checks)
+    provider_checks = map_get(checks, :provider, %{})
+    provider_name = map_get(checks, :provider_name, map_get(data, :provider, "unknown"))
+    tools = map_get(provider_checks, :tools, %{})
+    probes = map_get(provider_checks, :probes, [])
 
-    "gh=#{map_get(checks, :gh, false)} git=#{map_get(checks, :git, false)} claude=#{map_get(checks, :claude, false)}"
+    tools_ok =
+      case tools do
+        map when is_map(map) -> Enum.all?(map, fn {_tool, present?} -> present? == true end)
+        _ -> false
+      end
+
+    probes_ok =
+      case probes do
+        list when is_list(list) -> Enum.all?(list, &(map_get(&1, :pass?, false) == true))
+        _ -> false
+      end
+
+    "gh=#{map_get(shared, :gh, false)} git=#{map_get(shared, :git, false)} token=#{map_get(shared, :github_token_visible, false)} auth=#{map_get(shared, :gh_auth, false)} provider=#{provider_name} tools_ok=#{tools_ok} probes_ok=#{probes_ok}"
   end
 
   defp maybe_log_tool_start(shell, event) when is_map(event) do
     with %{"event" => %{"content_block" => %{"name" => name}}} <- event do
-      shell.info("[PrBot][Claude] tool=#{name}")
+      shell.info("[PrBot][CodingAgent] tool=#{name}")
     else
       _ -> :ok
     end
@@ -703,6 +762,23 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   end
 
   defp system_summary(_event), do: "model=unknown"
+
+  defp normalize_provider(provider) when provider in @supported_providers, do: provider
+
+  defp normalize_provider(provider) when is_binary(provider) do
+    provider
+    |> String.trim()
+    |> String.downcase()
+    |> case do
+      "claude" -> :claude
+      "amp" -> :amp
+      "codex" -> :codex
+      "gemini" -> :gemini
+      _ -> :claude
+    end
+  end
+
+  defp normalize_provider(_), do: :claude
 
   defp map_get(map, key, default \\ nil) when is_map(map) and is_atom(key) do
     case Map.fetch(map, key) do

@@ -8,6 +8,7 @@ defmodule Jido.Lib.Github.Schema.IssueTriage.Result do
             %{
               status: Zoi.atom(),
               run_id: Zoi.string(),
+              provider: Zoi.atom() |> Zoi.nullish(),
               owner: Zoi.string(),
               repo: Zoi.string(),
               issue_number: Zoi.integer(),
@@ -15,6 +16,9 @@ defmodule Jido.Lib.Github.Schema.IssueTriage.Result do
               investigation: Zoi.string() |> Zoi.nullish(),
               investigation_status: Zoi.atom() |> Zoi.nullish(),
               investigation_error: Zoi.string() |> Zoi.nullish(),
+              agent_status: Zoi.atom() |> Zoi.nullish(),
+              agent_summary: Zoi.string() |> Zoi.nullish(),
+              agent_error: Zoi.string() |> Zoi.nullish(),
               comment_posted: Zoi.boolean() |> Zoi.nullish(),
               comment_url: Zoi.string() |> Zoi.nullish(),
               comment_error: Zoi.string() |> Zoi.nullish(),

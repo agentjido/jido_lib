@@ -13,6 +13,7 @@ defmodule Mix.Tasks.JidoLib.Github.Pr do
   - `--setup-cmd CMD` - Setup command to run in cloned repo (repeatable)
   - `--check-cmd CMD` - Required check command before push/PR (repeatable)
   - `--base-branch BRANCH` - Override detected default base branch
+  - `--provider PROVIDER` - Coding provider: claude | amp | codex | gemini
   """
 
   use Mix.Task
@@ -21,6 +22,8 @@ defmodule Mix.Tasks.JidoLib.Github.Pr do
   @shortdoc "Create a PR from a GitHub issue with Jido.Lib"
 
   alias Jido.Lib.Github.Agents.PrBot
+
+  @supported_providers [:claude, :amp, :codex, :gemini]
 
   @doc false
   def handle_telemetry([:jido_runic, :runnable, status], _measurements, metadata, config) do
@@ -52,15 +55,17 @@ defmodule Mix.Tasks.JidoLib.Github.Pr do
           keep_sprite: :boolean,
           setup_cmd: :keep,
           check_cmd: :keep,
-          base_branch: :string
+          base_branch: :string,
+          provider: :string
         ],
-        aliases: [t: :timeout, k: :keep_sprite]
+        aliases: [t: :timeout, k: :keep_sprite, p: :provider]
       )
 
     url = List.first(args) || Mix.raise("Usage: mix jido_lib.github.pr <github_issue_url>")
     timeout = (opts[:timeout] || 900) * 1_000
     setup_commands = Keyword.get_values(opts, :setup_cmd)
     check_commands = Keyword.get_values(opts, :check_cmd)
+    provider = parse_provider(opts[:provider])
 
     handler_id = "jido-lib-github-pr-progress-#{System.unique_integer([:positive])}"
 
@@ -84,6 +89,7 @@ defmodule Mix.Tasks.JidoLib.Github.Pr do
             PrBot.run_issue(
               url,
               jido: Jido.Default,
+              provider: provider,
               timeout: timeout,
               keep_sprite: opts[:keep_sprite] || false,
               setup_commands: setup_commands,
@@ -158,4 +164,35 @@ defmodule Mix.Tasks.JidoLib.Github.Pr do
     do: Logger.put_module_level(Jido.AgentServer, level)
 
   defp restore_agent_server_level(_), do: Logger.delete_module_level(Jido.AgentServer)
+
+  defp parse_provider(nil), do: :claude
+  defp parse_provider(provider) when provider in @supported_providers, do: provider
+
+  defp parse_provider(provider) when is_binary(provider) do
+    normalized =
+      provider
+      |> String.trim()
+      |> String.downcase()
+
+    case normalized do
+      "claude" ->
+        :claude
+
+      "amp" ->
+        :amp
+
+      "codex" ->
+        :codex
+
+      "gemini" ->
+        :gemini
+
+      _ ->
+        Mix.raise("Invalid --provider #{inspect(provider)}. Allowed: claude, amp, codex, gemini")
+    end
+  end
+
+  defp parse_provider(provider) do
+    Mix.raise("Invalid --provider #{inspect(provider)}. Allowed: claude, amp, codex, gemini")
+  end
 end

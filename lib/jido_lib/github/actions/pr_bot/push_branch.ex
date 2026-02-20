@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.PushBranch do
     schema: [
       owner: [type: :string, required: true],
       repo: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
       branch_name: [type: :string, required: true],

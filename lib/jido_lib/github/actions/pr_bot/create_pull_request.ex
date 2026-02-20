@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.PrBot.CreatePullRequest do
     schema: [
       owner: [type: :string, required: true],
       repo: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       issue_number: [type: :integer, required: true],
       issue_url: [type: {:or, [:string, nil]}, default: nil],
       issue_title: [type: {:or, [:string, nil]}, default: nil],

@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.IssueTriage.FetchIssue do
     schema: [
       owner: [type: :string, required: true],
       repo: [type: :string, required: true],
+      provider: [type: :atom, default: :claude],
       issue_number: [type: :integer, required: true],
       session_id: [type: :string, required: true],
       timeout: [type: :integer, default: 300_000],

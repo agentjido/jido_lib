@@ -45,9 +45,23 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBotIntakeTest do
     assert intake.owner == "agentjido"
     assert intake.repo == "jido_chat"
     assert intake.issue_number == 19
+    assert intake.provider == :claude
     assert intake.keep_sprite == true
     assert intake.setup_commands == ["mix deps.get"]
     assert intake.sprite_config.token == "spr-token"
+  end
+
+  test "build_intake_attrs/5 accepts provider override" do
+    intake =
+      IssueTriageBot.build_intake_attrs(
+        "agentjido",
+        "jido_chat",
+        19,
+        "https://github.com/agentjido/jido_chat/issues/19",
+        provider: :codex
+      )
+
+    assert intake.provider == :codex
   end
 
   test "intake_signal/1 wraps payload in runic.feed signal" do
