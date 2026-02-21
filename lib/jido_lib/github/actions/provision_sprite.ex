@@ -25,6 +25,7 @@ defmodule Jido.Lib.Github.Actions.ProvisionSprite do
       shell_session_mod: [type: :atom, default: Jido.Shell.ShellSession]
     ]
 
+  alias Jido.Harness.Exec
   alias Jido.Lib.Github.Helpers
 
   @impl true
@@ -38,7 +39,8 @@ defmodule Jido.Lib.Github.Actions.ProvisionSprite do
     agent_mod = params[:shell_agent_mod] || Jido.Shell.Agent
 
     with {:ok, provisioned} <-
-           Jido.Shell.SpriteLifecycle.provision("triage-#{params.run_id}", sprite_config,
+           Exec.provision_workspace("triage-#{params.run_id}",
+             sprite_config: sprite_config,
              session_mod: session_mod,
              agent_mod: agent_mod,
              timeout: params[:timeout] || 30_000,

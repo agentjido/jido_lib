@@ -26,4 +26,11 @@ defmodule Jido.Lib.Github.Agents.PrBotTest do
     assert {:error, {:jido_not_started, :missing_jido}, _partial} =
              PrBot.run(%{run_id: "run-1"}, jido: :missing_jido, timeout: 1_000)
   end
+
+  test "plugin_specs/0 wires runtime context and observability plugins" do
+    plugin_modules = PrBot.plugin_specs() |> Enum.map(& &1.module)
+
+    assert Jido.Lib.Github.Plugins.Observability in plugin_modules
+    assert Jido.Lib.Github.Plugins.RuntimeContext in plugin_modules
+  end
 end

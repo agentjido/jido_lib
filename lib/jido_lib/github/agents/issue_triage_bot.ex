@@ -16,6 +16,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
   alias Jido.Lib.Github.Actions.ValidateHostEnv
   alias Jido.Lib.Github.AgentRuntime
   alias Jido.Lib.Github.Helpers
+  alias Jido.Lib.Github.Plugins.{Observability, RuntimeContext}
   alias Jido.Lib.Github.ResultMaps
   alias Runic.Workflow
 
@@ -37,7 +38,12 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
 
   @doc false
   @spec plugin_specs() :: [Jido.Plugin.Spec.t()]
-  def plugin_specs, do: []
+  def plugin_specs do
+    [
+      Observability.plugin_spec(%{}),
+      RuntimeContext.plugin_spec(%{})
+    ]
+  end
 
   @doc "Build the sprite triage DAG with provider-neutral coding execution."
   @spec build_workflow() :: Workflow.t()

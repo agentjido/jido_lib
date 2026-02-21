@@ -17,6 +17,7 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   alias Jido.Lib.Github.Actions.ValidateHostEnv
   alias Jido.Lib.Github.AgentRuntime
   alias Jido.Lib.Github.Helpers
+  alias Jido.Lib.Github.Plugins.{Observability, RuntimeContext}
   alias Jido.Lib.Github.ResultMaps
   alias Runic.Workflow
 
@@ -26,7 +27,12 @@ defmodule Jido.Lib.Github.Agents.PrBot do
 
   @doc false
   @spec plugin_specs() :: [Jido.Plugin.Spec.t()]
-  def plugin_specs, do: []
+  def plugin_specs do
+    [
+      Observability.plugin_spec(%{}),
+      RuntimeContext.plugin_spec(%{})
+    ]
+  end
 
   @doc """
   Build the PR workflow graph with provider-neutral coding execution.

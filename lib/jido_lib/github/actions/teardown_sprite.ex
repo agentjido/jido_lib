@@ -25,6 +25,7 @@ defmodule Jido.Lib.Github.Actions.TeardownSprite do
       sprites_mod: [type: :atom, default: Sprites]
     ]
 
+  alias Jido.Harness.Exec
   alias Jido.Lib.Github.Helpers
 
   @impl true
@@ -50,11 +51,11 @@ defmodule Jido.Lib.Github.Actions.TeardownSprite do
       sprites_mod = params[:sprites_mod] || Sprites
 
       teardown =
-        Helpers.teardown_sprite(
+        Exec.teardown_workspace(
           params.session_id,
-          params[:sprite_name],
-          agent_mod,
-          params[:sprite_config],
+          sprite_name: params[:sprite_name],
+          stop_mod: agent_mod,
+          sprite_config: params[:sprite_config],
           sprites_mod: sprites_mod
         )
 

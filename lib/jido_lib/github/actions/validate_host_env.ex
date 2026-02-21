@@ -34,42 +34,77 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
     "GH_PROMPT_DISABLED" => "1",
     "GIT_TERMINAL_PROMPT" => "0"
   }
+  @gh_env_keys ["GH_TOKEN", "GITHUB_TOKEN"]
+
+  @type validation_error :: %{
+          code: atom(),
+          message: String.t(),
+          provider: atom(),
+          missing: [String.t()],
+          required_any: [String.t()],
+          reason: term() | nil
+        }
 
   @impl true
   def run(params, _context) do
     provider = params[:provider] || :claude
-    validate_host_env!(provider)
-    {:ok, Helpers.pass_through(params)}
+
+    case validate_host_env(provider) do
+      :ok ->
+        {:ok, Helpers.pass_through(params)}
+
+      {:error, error} ->
+        {:error, {:validate_host_env_failed, error}}
+    end
   end
 
   @doc """
   Validate required host env vars for sprite triage and selected provider.
   """
-  @spec validate_host_env!(atom()) :: :ok | no_return()
-  def validate_host_env!(provider \\ :claude)
+  @spec validate_host_env(atom()) :: :ok | {:error, validation_error()}
+  def validate_host_env(provider \\ :claude)
 
-  def validate_host_env!(provider) when is_atom(provider) do
-    require_env!("SPRITES_TOKEN", "SPRITES_TOKEN environment variable not set")
-
-    require_any_env!(
-      ["GH_TOKEN", "GITHUB_TOKEN"],
-      "GH_TOKEN or GITHUB_TOKEN environment variable not set"
-    )
-
-    case ProviderRuntime.provider_runtime_contract(provider) do
-      {:ok, contract} ->
-        check_required_all(contract.host_env_required_all || [], provider)
-        check_required_any(contract.host_env_required_any || [], provider)
-        :ok
-
-      {:error, reason} ->
-        raise "Provider #{inspect(provider)} runtime contract unavailable: #{inspect(reason)}"
+  def validate_host_env(provider) when is_atom(provider) do
+    with :ok <-
+           require_env(
+             "SPRITES_TOKEN",
+             error(
+               :missing_sprite_token,
+               "SPRITES_TOKEN environment variable not set",
+               provider,
+               missing: ["SPRITES_TOKEN"]
+             )
+           ),
+         :ok <-
+           require_any_env(
+             @gh_env_keys,
+             error(
+               :missing_github_token,
+               "GH_TOKEN or GITHUB_TOKEN environment variable not set",
+               provider,
+               required_any: @gh_env_keys
+             )
+           ),
+         {:ok, contract} <- fetch_provider_runtime_contract(provider),
+         :ok <- check_required_all(contract.host_env_required_all || [], provider),
+         :ok <- check_required_any(contract.host_env_required_any || [], provider) do
+      :ok
     end
   end
 
-  def validate_host_env!(provider) do
-    raise "provider must be an atom, got: #{inspect(provider)}"
+  def validate_host_env(provider) do
+    {:error,
+     error(
+       :invalid_provider,
+       "provider must be an atom",
+       :unknown,
+       reason: {:invalid_provider, provider}
+     )}
   end
+
+  @doc false
+  @spec validate_host_env!(atom()) :: :ok | {:error, validation_error()}
+  def validate_host_env!(provider \\ :claude), do: validate_host_env(provider)
 
   defp check_required_all([], _provider), do: :ok
 
@@ -81,7 +116,13 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
     if missing == [] do
       :ok
     else
-      raise "Provider #{inspect(provider)} requires env vars: #{Enum.join(missing, ", ")}"
+      {:error,
+       error(
+         :missing_provider_env_all,
+         "Provider #{inspect(provider)} requires env vars: #{Enum.join(missing, ", ")}",
+         provider,
+         missing: missing
+       )}
     end
   end
 
@@ -91,7 +132,13 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
     if Enum.any?(keys, &present?(System.get_env(&1))) do
       :ok
     else
-      raise "Provider #{inspect(provider)} requires at least one of: #{Enum.join(keys, ", ")}"
+      {:error,
+       error(
+         :missing_provider_env_any,
+         "Provider #{inspect(provider)} requires at least one of: #{Enum.join(keys, ", ")}",
+         provider,
+         required_any: keys
+       )}
     end
   end
 
@@ -126,24 +173,61 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
     Map.merge(injected, forward_env)
   end
 
-  def build_sprite_env(provider) do
-    raise "provider must be an atom, got: #{inspect(provider)}"
+  def build_sprite_env(_provider) do
+    forward_env =
+      @fallback_forward_vars
+      |> Enum.reduce(%{}, fn key, acc ->
+        case System.get_env(key) do
+          nil -> acc
+          value -> Map.put(acc, key, value)
+        end
+      end)
+
+    Map.merge(@default_injected_env, forward_env)
   end
 
-  defp require_env!(key, message) do
+  defp require_env(key, error) do
     if present?(System.get_env(key)) do
       :ok
     else
-      raise message
+      {:error, error}
     end
   end
 
-  defp require_any_env!(keys, message) when is_list(keys) do
+  defp require_any_env(keys, error) when is_list(keys) do
     if Enum.any?(keys, &present?(System.get_env(&1))) do
       :ok
     else
-      raise message
+      {:error, error}
     end
+  end
+
+  defp fetch_provider_runtime_contract(provider) do
+    case ProviderRuntime.provider_runtime_contract(provider) do
+      {:ok, contract} ->
+        {:ok, contract}
+
+      {:error, reason} ->
+        {:error,
+         error(
+           :provider_runtime_contract_unavailable,
+           "Provider runtime contract unavailable",
+           provider,
+           reason: inspect(reason)
+         )}
+    end
+  end
+
+  defp error(code, message, provider, opts)
+       when is_atom(code) and is_binary(message) and is_list(opts) do
+    %{
+      code: code,
+      message: message,
+      provider: provider,
+      missing: Keyword.get(opts, :missing, []),
+      required_any: Keyword.get(opts, :required_any, []),
+      reason: Keyword.get(opts, :reason)
+    }
   end
 
   defp present?(value) when is_binary(value), do: String.trim(value) != ""

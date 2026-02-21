@@ -20,8 +20,7 @@ defmodule Jido.Lib.Github.Actions.ValidateRuntime do
 
   alias Jido.Harness.Exec
   alias Jido.Lib.Github.Helpers
-
-  @signal_source "/github/validate_runtime"
+  alias Jido.Lib.Github.Signal.RuntimeChecked
 
   @impl true
   def run(params, _context) do
@@ -87,17 +86,13 @@ defmodule Jido.Lib.Github.Actions.ValidateRuntime do
 
   defp emit_runtime_signal(pid, params, checks) when is_pid(pid) do
     signal =
-      Jido.Signal.new!(
-        "jido.lib.github.validate_runtime.checked",
-        %{
-          run_id: params[:run_id],
-          issue_number: params[:issue_number],
-          session_id: params[:session_id],
-          provider: params[:provider] || :claude,
-          runtime_checks: checks
-        },
-        source: @signal_source
-      )
+      RuntimeChecked.new!(%{
+        run_id: params[:run_id],
+        issue_number: params[:issue_number],
+        session_id: params[:session_id],
+        provider: params[:provider] || :claude,
+        runtime_checks: checks
+      })
 
     send(pid, {:jido_lib_signal, signal})
     :ok

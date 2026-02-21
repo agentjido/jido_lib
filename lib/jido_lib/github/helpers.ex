@@ -173,7 +173,15 @@ defmodule Jido.Lib.Github.Helpers do
   end
 
   @spec handle_telemetry([atom()], map(), map(), map()) :: :ok
-  def handle_telemetry([:jido_runic, :runnable, status], _measurements, metadata, config) do
+  def handle_telemetry([:jido_runic, :runnable, status], _measurements, metadata, config),
+    do: log_runnable_telemetry(status, metadata, config)
+
+  def handle_telemetry([:jido, :runic, :runnable, status], _measurements, metadata, config),
+    do: log_runnable_telemetry(status, metadata, config)
+
+  def handle_telemetry(_event, _measurements, _metadata, _config), do: :ok
+
+  defp log_runnable_telemetry(status, metadata, config) do
     node = metadata[:node]
     name = if node, do: node.name, else: :unknown
     elapsed = System.monotonic_time(:millisecond) - config.start_time
@@ -200,21 +208,6 @@ defmodule Jido.Lib.Github.Helpers do
       restore_agent_server_level(previous_agent_level)
       Logger.configure(level: previous_level)
     end
-  end
-
-  @spec teardown_sprite(String.t(), String.t() | nil, module(), map() | nil, keyword()) :: %{
-          teardown_verified: boolean(),
-          teardown_attempts: pos_integer(),
-          warnings: [String.t()] | nil
-        }
-  def teardown_sprite(session_id, sprite_name, stop_mod, sprite_config, opts \\ [])
-      when is_binary(session_id) and is_atom(stop_mod) do
-    Jido.Shell.SpriteLifecycle.teardown(session_id,
-      sprite_name: sprite_name,
-      stop_mod: stop_mod,
-      sprite_config: sprite_config,
-      sprites_mod: Keyword.get(opts, :sprites_mod, Sprites)
-    )
   end
 
   defp alternate_key(key) when is_atom(key), do: Atom.to_string(key)

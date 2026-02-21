@@ -2,10 +2,11 @@ defmodule Jido.Lib.Github.AgentRuntime do
   @moduledoc false
 
   alias Jido.Agent.Strategy.State, as: StratState
+  alias Jido.Harness.Exec, as: HarnessExec
+  alias Jido.Lib.Github.Agents.Observer
   alias Jido.Lib.Github.Helpers
+  alias Jido.Lib.Github.Observe
   alias Runic.Workflow
-
-  @delta_log_every 200
 
   @type run_snapshot :: %{
           productions: [map()],
@@ -31,13 +32,17 @@ defmodule Jido.Lib.Github.AgentRuntime do
     pipeline_meta =
       telemetry_meta(intake)
       |> Map.merge(%{agent: agent_module})
+      |> Map.put_new(
+        :request_id,
+        Helpers.map_get(intake, :request_id, Helpers.map_get(intake, :run_id))
+      )
 
     action_handler_id = "jido-lib-github-action-forward-#{System.unique_integer([:positive])}"
 
     attach_action_forwarder(action_handler_id, pipeline_meta)
 
-    :telemetry.execute(
-      [:jido_lib, :github, :pipeline, :start],
+    Observe.emit(
+      Observe.pipeline(:start),
       %{system_time: System.system_time()},
       pipeline_meta
     )
@@ -91,15 +96,15 @@ defmodule Jido.Lib.Github.AgentRuntime do
 
     case result do
       {:ok, run} ->
-        :telemetry.execute(
-          [:jido_lib, :github, :pipeline, :stop],
+        Observe.emit(
+          Observe.pipeline(:stop),
           %{system_time: System.system_time()},
           Map.merge(pipeline_meta, %{status: run.status, error: inspect(run.error)})
         )
 
       {:error, reason, run} ->
-        :telemetry.execute(
-          [:jido_lib, :github, :pipeline, :exception],
+        Observe.emit(
+          Observe.pipeline(:exception),
           %{system_time: System.system_time()},
           Map.merge(pipeline_meta, %{status: run.status, error: inspect(reason)})
         )
@@ -119,7 +124,10 @@ defmodule Jido.Lib.Github.AgentRuntime do
         case Keyword.get(opts, :observer) do
           shell when is_atom(shell) ->
             if function_exported?(shell, :info, 1) do
-              {start_observer(shell, label), true}
+              case start_observer(shell, label) do
+                pid when is_pid(pid) -> {pid, true}
+                _ -> {nil, false}
+              end
             else
               {nil, false}
             end
@@ -132,7 +140,7 @@ defmodule Jido.Lib.Github.AgentRuntime do
 
   @spec stop_observer(pid() | nil) :: :ok
   def stop_observer(pid) when is_pid(pid) do
-    send(pid, :stop)
+    Observer.stop(pid)
     :ok
   end
 
@@ -229,11 +237,11 @@ defmodule Jido.Lib.Github.AgentRuntime do
       case context.session_id do
         session_id when is_binary(session_id) ->
           _ =
-            Helpers.teardown_sprite(
+            HarnessExec.teardown_workspace(
               session_id,
-              context.sprite_name,
-              stop_module(intake),
-              context.sprite_config,
+              sprite_name: context.sprite_name,
+              stop_mod: stop_module(intake),
+              sprite_config: context.sprite_config,
               sprites_mod: context.sprites_mod || Helpers.map_get(intake, :sprites_mod) || Sprites
             )
 
@@ -331,148 +339,12 @@ defmodule Jido.Lib.Github.AgentRuntime do
     end)
   end
 
-  defp start_observer(shell, label), do: spawn_link(fn -> observe_signals(shell, label, 0) end)
-
-  defp observe_signals(shell, label, delta_count) do
-    receive do
-      :stop ->
-        :ok
-
-      {:jido_lib_signal, %Jido.Signal{type: type, data: data}} ->
-        next_count = print_signal(shell, label, type, data, delta_count)
-        observe_signals(shell, label, next_count)
-    after
-      120_000 ->
-        :ok
+  defp start_observer(shell, label) do
+    case Observer.start_link(shell: shell, label: label) do
+      {:ok, pid} when is_pid(pid) -> pid
+      _ -> nil
     end
   end
-
-  defp print_signal(shell, label, "jido.lib.github.coding_agent.event", data, delta_count) do
-    event = Helpers.map_get(data, :event, %{})
-    event_type = Helpers.map_get(data, :event_type, Helpers.map_get(event, :type, "unknown"))
-    next = delta_count + 1
-
-    if rem(next, @delta_log_every) == 0 do
-      shell.info("[#{label}][CodingAgent] events=#{next}")
-    end
-
-    if event_type in ["stream_event", "content_block_start"] do
-      maybe_log_tool_start(shell, label, event)
-    end
-
-    if event_type == "result" do
-      shell.info("[#{label}][CodingAgent] result #{result_summary(event)}")
-    end
-
-    if event_type == "system" do
-      shell.info("[#{label}][CodingAgent] init #{system_summary(event)}")
-    end
-
-    next
-  end
-
-  defp print_signal(shell, label, type, data, delta_count) do
-    cond do
-      String.starts_with?(type, "jido.lib.github.coding_agent.") ->
-        print_coding_agent_signal(shell, label, type, data)
-        delta_count
-
-      type == "jido.lib.github.validate_runtime.checked" ->
-        shell.info("[#{label}][Runtime] #{runtime_summary(data)}")
-        delta_count
-
-      true ->
-        delta_count
-    end
-  end
-
-  defp print_coding_agent_signal(shell, label, "jido.lib.github.coding_agent.started", data) do
-    provider = Helpers.map_get(data, :provider, "unknown")
-    issue_number = Helpers.map_get(data, :issue_number, "?")
-    shell.info("[#{label}][CodingAgent] provider=#{provider} started issue=#{issue_number}")
-  end
-
-  defp print_coding_agent_signal(shell, label, "jido.lib.github.coding_agent.mode", data) do
-    provider = Helpers.map_get(data, :provider, "unknown")
-    mode = Helpers.map_get(data, :mode, "unknown")
-    shell.info("[#{label}][CodingAgent] provider=#{provider} mode=#{mode}")
-  end
-
-  defp print_coding_agent_signal(shell, label, "jido.lib.github.coding_agent.heartbeat", data) do
-    shell.info("[#{label}][CodingAgent] heartbeat idle_ms=#{Helpers.map_get(data, :idle_ms, 0)}")
-  end
-
-  defp print_coding_agent_signal(shell, label, "jido.lib.github.coding_agent.completed", data) do
-    events = Helpers.map_get(data, :event_count, 0)
-    bytes = Helpers.map_get(data, :summary_bytes, 0)
-    shell.info("[#{label}][CodingAgent] completed events=#{events} bytes=#{bytes}")
-  end
-
-  defp print_coding_agent_signal(shell, label, "jido.lib.github.coding_agent.failed", data) do
-    error = Helpers.map_get(data, :error, "unknown")
-    shell.info("[#{label}][CodingAgent] failed error=#{error}")
-  end
-
-  defp print_coding_agent_signal(shell, label, "jido.lib.github.coding_agent.raw_line", data) do
-    line = Helpers.map_get(data, :line, "")
-    shell.info("[#{label}][CodingAgent][raw] #{line}")
-  end
-
-  defp print_coding_agent_signal(_shell, _label, _type, _data), do: :ok
-
-  defp runtime_summary(data) do
-    checks = Helpers.map_get(data, :runtime_checks, %{})
-    shared = Helpers.map_get(checks, :shared, checks)
-    provider_checks = Helpers.map_get(checks, :provider, %{})
-
-    provider_name =
-      Helpers.map_get(checks, :provider_name, Helpers.map_get(data, :provider, "unknown"))
-
-    tools = Helpers.map_get(provider_checks, :tools, %{})
-    probes = Helpers.map_get(provider_checks, :probes, [])
-
-    tools_ok =
-      case tools do
-        map when is_map(map) -> Enum.all?(map, fn {_tool, present?} -> present? == true end)
-        _ -> false
-      end
-
-    probes_ok =
-      case probes do
-        list when is_list(list) -> Enum.all?(list, &(Helpers.map_get(&1, :pass?, false) == true))
-        _ -> false
-      end
-
-    "gh=#{Helpers.map_get(shared, :gh, false)} git=#{Helpers.map_get(shared, :git, false)} token=#{Helpers.map_get(shared, :github_token_visible, false)} auth=#{Helpers.map_get(shared, :gh_auth, false)} provider=#{provider_name} tools_ok=#{tools_ok} probes_ok=#{probes_ok}"
-  end
-
-  defp maybe_log_tool_start(shell, label, event) when is_map(event) do
-    with %{"event" => %{"content_block" => %{"name" => name}}} <- event do
-      shell.info("[#{label}][CodingAgent] tool=#{name}")
-    else
-      _ -> :ok
-    end
-  end
-
-  defp maybe_log_tool_start(_shell, _label, _event), do: :ok
-
-  defp result_summary(event) when is_map(event) do
-    duration_ms = Helpers.map_get(event, :duration_ms, 0)
-    turns = Helpers.map_get(event, :num_turns, 0)
-    cost = Helpers.map_get(event, :total_cost_usd, 0)
-    status = Helpers.map_get(event, :subtype, "unknown")
-    "status=#{status} turns=#{turns} duration_ms=#{duration_ms} cost_usd=#{cost}"
-  end
-
-  defp result_summary(_event), do: "status=unknown"
-
-  defp system_summary(event) when is_map(event) do
-    model = Helpers.map_get(event, :model, "unknown")
-    version = Helpers.map_get(event, :claude_code_version, "unknown")
-    "model=#{model} cli=#{version}"
-  end
-
-  defp system_summary(_event), do: "model=unknown"
 
   defp attach_action_forwarder(handler_id, base_meta) do
     _ = :telemetry.detach(handler_id)
@@ -482,7 +354,10 @@ defmodule Jido.Lib.Github.AgentRuntime do
       [
         [:jido_runic, :runnable, :started],
         [:jido_runic, :runnable, :completed],
-        [:jido_runic, :runnable, :failed]
+        [:jido_runic, :runnable, :failed],
+        [:jido, :runic, :runnable, :started],
+        [:jido, :runic, :runnable, :completed],
+        [:jido, :runic, :runnable, :failed]
       ],
       &__MODULE__.forward_action_telemetry/4,
       %{base_meta: base_meta}
@@ -499,6 +374,16 @@ defmodule Jido.Lib.Github.AgentRuntime do
 
   @doc false
   def forward_action_telemetry([:jido_runic, :runnable, status], measurements, metadata, config) do
+    do_forward_action_telemetry(status, measurements, metadata, config)
+  end
+
+  def forward_action_telemetry([:jido, :runic, :runnable, status], measurements, metadata, config) do
+    do_forward_action_telemetry(status, measurements, metadata, config)
+  end
+
+  def forward_action_telemetry(_event, _measurements, _metadata, _config), do: :ok
+
+  defp do_forward_action_telemetry(status, measurements, metadata, config) do
     base_meta = config[:base_meta] || %{}
 
     node_name =
@@ -519,22 +404,22 @@ defmodule Jido.Lib.Github.AgentRuntime do
 
     case status do
       :started ->
-        :telemetry.execute(
-          [:jido_lib, :github, :action, :start],
+        Observe.emit(
+          Observe.action(:start),
           %{system_time: System.system_time(), duration_ms: duration_ms},
           event_meta
         )
 
       :completed ->
-        :telemetry.execute(
-          [:jido_lib, :github, :action, :stop],
+        Observe.emit(
+          Observe.action(:stop),
           %{system_time: System.system_time(), duration_ms: duration_ms},
           event_meta
         )
 
       :failed ->
-        :telemetry.execute(
-          [:jido_lib, :github, :action, :exception],
+        Observe.emit(
+          Observe.action(:exception),
           %{system_time: System.system_time(), duration_ms: duration_ms},
           event_meta
         )
@@ -550,6 +435,7 @@ defmodule Jido.Lib.Github.AgentRuntime do
 
   defp telemetry_meta(intake) when is_map(intake) do
     %{
+      request_id: Helpers.map_get(intake, :request_id, Helpers.map_get(intake, :run_id)),
       run_id: Helpers.map_get(intake, :run_id),
       provider: Helpers.map_get(intake, :provider, :claude),
       agent_mode: Helpers.map_get(intake, :agent_mode),

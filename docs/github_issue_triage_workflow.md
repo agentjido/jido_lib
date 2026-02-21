@@ -72,9 +72,8 @@ The workflow returns a `Jido.Lib.Github.Schema.IssueTriage.Result` with:
 
 Runtime observability signals:
 
-- `jido.lib.github.issue_triage.coding_agent.*`
-- `jido.lib.github.issue_triage.delegate.*`
-- `jido.lib.github.issue_triage.validate_runtime.checked`
+- `jido.lib.github.coding_agent.*`
+- `jido.lib.github.validate_runtime.checked`
 
 ## Canonical Command
 

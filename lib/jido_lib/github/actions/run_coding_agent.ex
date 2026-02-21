@@ -33,14 +33,32 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
   alias Jido.Harness.Exec
   alias Jido.Harness.Exec.ProviderRuntime
   alias Jido.Lib.Github.Helpers
+  alias Jido.Lib.Github.Observe
 
-  @signal_source "/github/coding_agent"
+  alias Jido.Lib.Github.Signal.{
+    CodingAgentCompleted,
+    CodingAgentEvent,
+    CodingAgentFailed,
+    CodingAgentHeartbeat,
+    CodingAgentMode,
+    CodingAgentRawLine,
+    CodingAgentStarted
+  }
+
   @heartbeat_interval_ms 5_000
   @max_raw_line_chars 600
   @triage_max_body_chars 2_000
   @coding_max_body_chars 3_000
   @default_timeout_ms %{triage: 300_000, coding: 600_000}
-  @signal_prefix "jido.lib.github.coding_agent"
+  @signal_module_by_suffix %{
+    "started" => CodingAgentStarted,
+    "mode" => CodingAgentMode,
+    "event" => CodingAgentEvent,
+    "raw_line" => CodingAgentRawLine,
+    "heartbeat" => CodingAgentHeartbeat,
+    "completed" => CodingAgentCompleted,
+    "failed" => CodingAgentFailed
+  }
 
   @impl true
   def run(params, _context) do
@@ -78,7 +96,7 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
              on_mode: fn mode ->
                emit_signal(observer_pid, "mode", %{
                  provider: provider,
-                 mode: mode,
+                 mode: normalize_signal_value(mode),
                  agent_mode: agent_mode,
                  session_id: params.session_id
                })
@@ -90,7 +108,7 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
                  provider: provider,
                  agent_mode: agent_mode,
                  session_id: params[:session_id],
-                 event_type: Helpers.map_get(event, :type),
+                 event_type: normalize_signal_value(Helpers.map_get(event, :type)),
                  event: event
                })
              end,
@@ -225,15 +243,13 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
 
   defp emit_signal(pid, suffix, data)
        when is_pid(pid) and is_binary(suffix) and is_map(data) do
-    signal =
-      Jido.Signal.new!(
-        "#{@signal_prefix}.#{suffix}",
-        data,
-        source: @signal_source
-      )
-
-    send(pid, {:jido_lib_signal, signal})
-    :ok
+    with {:ok, module} <- Map.fetch(@signal_module_by_suffix, suffix),
+         {:ok, signal} <- module.new(data) do
+      send(pid, {:jido_lib_signal, signal})
+      :ok
+    else
+      _ -> :ok
+    end
   rescue
     _ -> :ok
   end
@@ -368,8 +384,12 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
       error: if(reason, do: inspect(reason), else: nil)
     }
 
-    :telemetry.execute([:jido_lib, :github, :coding_agent, :summary], measurements, metadata)
+    Observe.emit(Observe.coding_agent(:summary), measurements, metadata)
   rescue
     _ -> :ok
   end
+
+  defp normalize_signal_value(nil), do: nil
+  defp normalize_signal_value(value) when is_binary(value), do: value
+  defp normalize_signal_value(value), do: to_string(value)
 end

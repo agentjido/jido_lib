@@ -22,7 +22,8 @@ defmodule Jido.Lib.MixProject do
         extras: [
           "README.md",
           "docs/github_issue_triage_workflow.md",
-          "docs/github_pr_bot_workflow.md"
+          "docs/github_pr_bot_workflow.md",
+          "docs/telemetry.md"
         ]
       ],
       # Hex

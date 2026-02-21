@@ -23,25 +23,40 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnvTest do
       |> Enum.map(&{&1, System.get_env(&1)})
       |> Enum.into(%{})
 
+    previous_providers = Application.get_env(:jido_harness, :providers)
+
+    Application.put_env(:jido_harness, :providers, %{
+      claude: Jido.Claude.Adapter,
+      amp: Jido.Amp.Adapter,
+      codex: Jido.Codex.Adapter,
+      gemini: Jido.Gemini.Adapter
+    })
+
     on_exit(fn ->
       Enum.each(previous, fn {key, value} ->
         if is_binary(value), do: System.put_env(key, value), else: System.delete_env(key)
       end)
+
+      if is_nil(previous_providers) do
+        Application.delete_env(:jido_harness, :providers)
+      else
+        Application.put_env(:jido_harness, :providers, previous_providers)
+      end
     end)
 
     :ok
   end
 
-  test "validate_host_env!/0 passes for strict ZAI requirements" do
+  test "validate_host_env/0 passes for strict provider requirements" do
     System.put_env("SPRITES_TOKEN", "spr-token")
     System.put_env("ANTHROPIC_BASE_URL", "https://zai.example/v1")
     System.put_env("ANTHROPIC_AUTH_TOKEN", "auth-token")
     System.put_env("GH_TOKEN", "gh-token")
 
-    assert :ok == ValidateHostEnv.validate_host_env!()
+    assert :ok == ValidateHostEnv.validate_host_env()
   end
 
-  test "validate_host_env!/0 fails when provider auth env is missing" do
+  test "validate_host_env/0 returns typed error when provider auth env is missing" do
     System.put_env("SPRITES_TOKEN", "spr-token")
     System.delete_env("ANTHROPIC_BASE_URL")
     System.delete_env("ANTHROPIC_AUTH_TOKEN")
@@ -49,9 +64,10 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnvTest do
     System.delete_env("CLAUDE_CODE_API_KEY")
     System.put_env("GH_TOKEN", "gh-token")
 
-    assert_raise RuntimeError, ~r/requires at least one of/, fn ->
-      ValidateHostEnv.validate_host_env!()
-    end
+    assert {:error, error} = ValidateHostEnv.validate_host_env()
+    assert error.code == :missing_provider_env_any
+    assert is_list(error.required_any)
+    assert Enum.any?(error.required_any, &String.contains?(&1, "ANTHROPIC"))
   end
 
   test "build_sprite_env/0 forwards auth, model, and github vars" do

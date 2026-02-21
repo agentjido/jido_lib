@@ -26,6 +26,10 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
     Helpers.handle_telemetry([:jido_runic, :runnable, status], %{}, metadata, config)
   end
 
+  def handle_telemetry([:jido, :runic, :runnable, status], _measurements, metadata, config) do
+    Helpers.handle_telemetry([:jido, :runic, :runnable, status], %{}, metadata, config)
+  end
+
   @impl Mix.Task
   def run(args) do
     Mix.Task.run("app.start")
@@ -53,7 +57,9 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
       handler_id,
       [
         [:jido_runic, :runnable, :completed],
-        [:jido_runic, :runnable, :failed]
+        [:jido_runic, :runnable, :failed],
+        [:jido, :runic, :runnable, :completed],
+        [:jido, :runic, :runnable, :failed]
       ],
       &__MODULE__.handle_telemetry/4,
       %{shell: Mix.shell(), start_time: System.monotonic_time(:millisecond)}
