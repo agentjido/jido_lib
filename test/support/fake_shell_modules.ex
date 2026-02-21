@@ -108,6 +108,9 @@ defmodule Jido.Lib.Test.FakeShellAgent do
 
   defp scripted_response(command) do
     cond do
+      env_probe_command?(command) ->
+        env_probe_response(command)
+
       String.contains?(command, "gh repo view") and
           String.contains?(command, "defaultBranchRef") ->
         {:ok, "main"}
@@ -298,6 +301,28 @@ defmodule Jido.Lib.Test.FakeShellAgent do
         {:ok, "https://github.com/test/repo/issues/42#issuecomment-1"}
 
       true ->
+        {:ok, "ok"}
+    end
+  end
+
+  defp env_probe_command?(command) when is_binary(command) do
+    String.contains?(command, "if [ -n \"${") and
+      String.contains?(command, "echo present") and
+      String.contains?(command, "echo missing")
+  end
+
+  defp env_probe_response(command) do
+    case Regex.run(~r/\$\{([A-Z0-9_]+):-\}/, command, capture: :all_but_first) do
+      [env_key] ->
+        value = System.get_env(env_key)
+
+        if is_binary(value) and value != "" do
+          {:ok, "present"}
+        else
+          {:ok, "missing"}
+        end
+
+      _ ->
         {:ok, "ok"}
     end
   end

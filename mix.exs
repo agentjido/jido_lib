@@ -48,16 +48,16 @@ defmodule Jido.Lib.MixProject do
     [
       # Jido ecosystem
       {:jido, "~> 2.0.0-rc.5"},
-      {:jido_runic, path: "../jido_runic"},
+      {:jido_runic, github: "agentjido/jido_runic", branch: "main"},
       {:jido_action, github: "agentjido/jido_action", branch: "main", override: true},
       {:libgraph, github: "zblanco/libgraph", branch: "zw/multigraph-indexes", override: true},
-      {:jido_shell, path: "../jido_shell", override: true},
-      {:jido_harness, path: "../jido_harness", override: true},
-      {:jido_claude, path: "../jido_claude"},
-      {:jido_amp, path: "../jido_amp"},
-      {:jido_codex, path: "../jido_codex"},
-      {:jido_gemini, path: "../jido_gemini"},
-      {:jido_vfs, path: "../jido_vfs", override: true},
+      {:jido_shell, github: "agentjido/jido_shell", branch: "main", override: true},
+      {:jido_harness, github: "agentjido/jido_harness", branch: "main", override: true},
+      {:jido_claude, github: "agentjido/jido_claude", branch: "main"},
+      {:jido_amp, github: "agentjido/jido_amp", branch: "main"},
+      {:jido_codex, github: "agentjido/jido_codex", branch: "main"},
+      {:jido_gemini, github: "agentjido/jido_gemini", branch: "main"},
+      {:jido_vfs, github: "agentjido/jido_vfs", branch: "main", override: true},
       {:sprites, git: "https://github.com/mikehostetler/sprites-ex.git"},
 
       # Schemas & validation
