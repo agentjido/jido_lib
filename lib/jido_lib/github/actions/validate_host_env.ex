@@ -26,8 +26,8 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
       shell_session_mod: [type: :atom, default: Jido.Shell.ShellSession]
     ]
 
-  alias Jido.Lib.Github.Helpers
   alias Jido.Harness.Exec.ProviderRuntime
+  alias Jido.Lib.Github.Helpers
 
   @fallback_forward_vars ["GH_TOKEN", "GITHUB_TOKEN"]
   @default_injected_env %{
@@ -86,9 +86,8 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
              )
            ),
          {:ok, contract} <- fetch_provider_runtime_contract(provider),
-         :ok <- check_required_all(contract.host_env_required_all || [], provider),
-         :ok <- check_required_any(contract.host_env_required_any || [], provider) do
-      :ok
+         :ok <- check_required_all(contract.host_env_required_all, provider) do
+      check_required_any(contract.host_env_required_any, provider)
     end
   end
 
@@ -153,8 +152,8 @@ defmodule Jido.Lib.Github.Actions.ValidateHostEnv do
       case ProviderRuntime.provider_runtime_contract(provider) do
         {:ok, contract} ->
           {
-            Enum.uniq(@fallback_forward_vars ++ (contract.sprite_env_forward || [])),
-            Map.merge(@default_injected_env, contract.sprite_env_injected || %{})
+            Enum.uniq(@fallback_forward_vars ++ contract.sprite_env_forward),
+            Map.merge(@default_injected_env, contract.sprite_env_injected)
           }
 
         {:error, _} ->

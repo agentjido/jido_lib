@@ -311,18 +311,13 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
   end
 
   defp coding_prompt(params) do
-    labels = params[:issue_labels] || []
-    label_text = if labels == [], do: "none", else: Enum.join(labels, ", ")
-    check_commands = params[:check_commands] || []
-
-    checks_text =
-      if check_commands == [], do: "(none provided)", else: Enum.join(check_commands, "\n- ")
-
-    issue_body = truncate_body(params[:issue_body] || "", :coding)
-    issue_title = params[:issue_title] || "Issue ##{params[:issue_number]}"
-    issue_url = params[:issue_url] || "(unknown)"
-    branch_name = params[:branch_name] || "(current)"
-    base_branch = params[:base_branch] || "(unknown)"
+    issue_body = truncate_body(optional_binary(params[:issue_body], ""), :coding)
+    issue_title = optional_binary(params[:issue_title], "Issue ##{params[:issue_number]}")
+    issue_url = optional_binary(params[:issue_url], "(unknown)")
+    branch_name = optional_binary(params[:branch_name], "(current)")
+    base_branch = optional_binary(params[:base_branch], "(unknown)")
+    label_text = format_labels(params[:issue_labels])
+    checks_text = format_check_commands(params[:check_commands])
 
     """
     You are implementing a fix for a GitHub issue in this repository.
@@ -351,6 +346,33 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgent do
     """
     |> String.trim()
   end
+
+  defp format_labels(labels) do
+    labels
+    |> normalize_string_list()
+    |> case do
+      [] -> "none"
+      values -> Enum.join(values, ", ")
+    end
+  end
+
+  defp format_check_commands(commands) do
+    commands
+    |> normalize_string_list()
+    |> case do
+      [] -> "(none provided)"
+      values -> Enum.join(values, "\n- ")
+    end
+  end
+
+  defp normalize_string_list(list) when is_list(list) do
+    Enum.filter(list, &is_binary/1)
+  end
+
+  defp normalize_string_list(_), do: []
+
+  defp optional_binary(value, _fallback) when is_binary(value) and value != "", do: value
+  defp optional_binary(_value, fallback), do: fallback
 
   defp truncate_body(body, :triage) when byte_size(body) <= @triage_max_body_chars, do: body
 

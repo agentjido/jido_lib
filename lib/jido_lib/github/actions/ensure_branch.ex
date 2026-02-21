@@ -115,9 +115,6 @@ defmodule Jido.Lib.Github.Actions.EnsureBranch do
           {:error, {:checkout_branch_failed, base_branch, candidate, reason}}
       end
     else
-      {:ok, false} ->
-        do_ensure_unique_branch(params, base_branch, agent_mod, timeout, base_name, attempt + 1)
-
       {:error, reason} ->
         {:error, reason}
 

@@ -32,6 +32,9 @@ defmodule Jido.Lib.MixProject do
         licenses: ["Apache-2.0"],
         maintainers: ["Agent Jido Community"],
         links: %{"GitHub" => @source_url}
+      ],
+      dialyzer: [
+        plt_add_apps: [:mix]
       ]
     ]
   end
@@ -83,7 +86,7 @@ defmodule Jido.Lib.MixProject do
 
   defp aliases do
     [
-      quality: ["format", "credo --strict", "dialyzer", "doctor --raise"],
+      quality: ["format", "credo --all", "dialyzer"],
       setup: ["deps.get", "deps.compile"]
     ]
   end

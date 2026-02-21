@@ -41,9 +41,6 @@ defmodule Jido.Lib.Github.Actions.EnsureCommit do
     else
       {:error, reason} ->
         {:error, {:ensure_commit_failed, reason}}
-
-      false ->
-        {:error, {:ensure_commit_failed, :no_changes}}
     end
   end
 

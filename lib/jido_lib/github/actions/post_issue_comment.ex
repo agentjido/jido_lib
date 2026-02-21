@@ -138,6 +138,4 @@ defmodule Jido.Lib.Github.Actions.PostIssueComment do
       _ -> nil
     end
   end
-
-  defp extract_url(_), do: nil
 end

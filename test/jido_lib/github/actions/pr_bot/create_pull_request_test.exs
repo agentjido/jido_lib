@@ -5,19 +5,17 @@ defmodule Jido.Lib.Github.Actions.CreatePullRequestTest do
 
   defmodule ReusedPrShellAgent do
     def run(_session_id, command, _opts \\ []) do
-      cond do
-        String.contains?(command, "gh pr list") ->
-          {:ok,
-           Jason.encode!([
-             %{
-               "number" => 99,
-               "url" => "https://github.com/test/repo/pull/99",
-               "title" => "Existing PR"
-             }
-           ])}
-
-        true ->
-          {:ok, "ok"}
+      if String.contains?(command, "gh pr list") do
+        {:ok,
+         Jason.encode!([
+           %{
+             "number" => 99,
+             "url" => "https://github.com/test/repo/pull/99",
+             "title" => "Existing PR"
+           }
+         ])}
+      else
+        {:ok, "ok"}
       end
     end
   end

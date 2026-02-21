@@ -118,14 +118,14 @@ defmodule Jido.Lib.Github.Plugins.Observability do
   end
 
   defp maybe_log_tool_start(shell, label, event) when is_map(event) do
-    with %{"event" => %{"content_block" => %{"name" => name}}} <- event do
-      shell.info("[#{label}][CodingAgent] tool=#{name}")
-    else
-      _ -> :ok
+    case event do
+      %{"event" => %{"content_block" => %{"name" => name}}} ->
+        shell.info("[#{label}][CodingAgent] tool=#{name}")
+
+      _ ->
+        :ok
     end
   end
-
-  defp maybe_log_tool_start(_shell, _label, _event), do: :ok
 
   defp result_summary(event) when is_map(event) do
     duration_ms = Helpers.map_get(event, :duration_ms, 0)
@@ -135,13 +135,9 @@ defmodule Jido.Lib.Github.Plugins.Observability do
     "status=#{status} turns=#{turns} duration_ms=#{duration_ms} cost_usd=#{cost}"
   end
 
-  defp result_summary(_event), do: "status=unknown"
-
   defp system_summary(event) when is_map(event) do
     model = Helpers.map_get(event, :model, "unknown")
     version = Helpers.map_get(event, :claude_code_version, "unknown")
     "model=#{model} cli=#{version}"
   end
-
-  defp system_summary(_event), do: "model=unknown"
 end

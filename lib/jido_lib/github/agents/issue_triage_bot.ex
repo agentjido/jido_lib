@@ -247,10 +247,10 @@ defmodule Jido.Lib.Github.Agents.IssueTriageBot do
       status: status,
       result: result,
       error: error,
-      productions: run.productions || [],
-      facts: run.facts || [],
-      events: run.events || [],
-      failures: run.failures || [],
+      productions: run.productions,
+      facts: run.facts,
+      events: run.events,
+      failures: run.failures,
       pid: run.pid
     }
   end

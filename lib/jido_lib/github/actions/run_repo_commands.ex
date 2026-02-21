@@ -76,20 +76,39 @@ defmodule Jido.Lib.Github.Actions.RunRepoCommands do
 
       {:error, reason} ->
         next_acc = [%{cmd: cmd, status: :failed, error: inspect(reason)} | acc]
+        handle_command_failure(fail_mode, rest, params, agent_mod, timeout, next_acc, cmd, reason)
+    end
+  end
 
-        case fail_mode do
-          :halt_on_first ->
-            {:error, cmd, reason, Enum.reverse(next_acc)}
+  defp handle_command_failure(
+         :halt_on_first,
+         _rest,
+         _params,
+         _agent_mod,
+         _timeout,
+         next_acc,
+         cmd,
+         reason
+       ) do
+    {:error, cmd, reason, Enum.reverse(next_acc)}
+  end
 
-          :collect_then_fail ->
-            case run_commands(rest, params, agent_mod, timeout, fail_mode, next_acc) do
-              {:ok, results} ->
-                {:error, cmd, reason, results}
+  defp handle_command_failure(
+         :collect_then_fail,
+         rest,
+         params,
+         agent_mod,
+         timeout,
+         next_acc,
+         cmd,
+         reason
+       ) do
+    case run_commands(rest, params, agent_mod, timeout, :collect_then_fail, next_acc) do
+      {:ok, results} ->
+        {:error, cmd, reason, results}
 
-              {:error, first_cmd, first_reason, results} ->
-                {:error, first_cmd, first_reason, results}
-            end
-        end
+      {:error, first_cmd, first_reason, results} ->
+        {:error, first_cmd, first_reason, results}
     end
   end
 

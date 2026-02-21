@@ -48,70 +48,85 @@ defmodule Jido.Lib.Github.AgentRuntime do
     )
 
     result =
-      with :ok <- ensure_jido_ready(jido),
-           {:ok, pid} <-
-             Jido.AgentServer.start_link(agent: agent_module, jido: jido, debug: debug) do
-        try do
-          payload = maybe_put_observer(intake, observer_pid)
-          Jido.AgentServer.cast(pid, agent_module.intake_signal(payload))
+      execute_pipeline(
+        agent_module,
+        intake,
+        observer_pid,
+        timeout,
+        jido,
+        debug,
+        sprite_prefix
+      )
 
-          completion = Jido.AgentServer.await_completion(pid, timeout: timeout)
-          run = snapshot(pid)
-
-          case completion do
-            {:ok, %{status: :completed}} ->
-              if run.failures == [] do
-                {:ok, Map.merge(run, %{status: :completed, error: nil, pid: pid})}
-              else
-                maybe_cleanup_sprite(intake, pid, run.productions, sprite_prefix)
-
-                {:ok,
-                 Map.merge(run, %{
-                   status: :failed,
-                   result: nil,
-                   error: {:pipeline_failed, run.failures},
-                   pid: pid
-                 })}
-              end
-
-            {:ok, %{status: :failed}} ->
-              maybe_cleanup_sprite(intake, pid, run.productions, sprite_prefix)
-
-              {:ok,
-               Map.merge(run, %{status: :failed, result: nil, error: :pipeline_failed, pid: pid})}
-
-            {:error, reason} ->
-              maybe_cleanup_sprite(intake, pid, run.productions, sprite_prefix)
-
-              {:error, reason,
-               Map.merge(run, %{status: :error, result: nil, error: reason, pid: pid})}
-          end
-        after
-          if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5_000)
-        end
-      else
-        {:error, reason} ->
-          {:error, reason, empty_run()}
-      end
-
-    case result do
-      {:ok, run} ->
-        Observe.emit(
-          Observe.pipeline(:stop),
-          %{system_time: System.system_time()},
-          Map.merge(pipeline_meta, %{status: run.status, error: inspect(run.error)})
-        )
-
-      {:error, reason, run} ->
-        Observe.emit(
-          Observe.pipeline(:exception),
-          %{system_time: System.system_time()},
-          Map.merge(pipeline_meta, %{status: run.status, error: inspect(reason)})
-        )
-    end
+    emit_pipeline_completion(result, pipeline_meta)
 
     detach_action_forwarder(action_handler_id)
     result
+  end
+
+  defp execute_pipeline(agent_module, intake, observer_pid, timeout, jido, debug, sprite_prefix) do
+    with :ok <- ensure_jido_ready(jido),
+         {:ok, pid} <- Jido.AgentServer.start_link(agent: agent_module, jido: jido, debug: debug) do
+      run_pipeline_process(agent_module, intake, observer_pid, timeout, pid, sprite_prefix)
+    else
+      {:error, reason} -> {:error, reason, empty_run()}
+    end
+  end
+
+  defp run_pipeline_process(agent_module, intake, observer_pid, timeout, pid, sprite_prefix) do
+    try do
+      payload = maybe_put_observer(intake, observer_pid)
+      Jido.AgentServer.cast(pid, agent_module.intake_signal(payload))
+
+      completion = Jido.AgentServer.await_completion(pid, timeout: timeout)
+      run = snapshot(pid)
+
+      completion_result(completion, run, intake, pid, sprite_prefix)
+    after
+      if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5_000)
+    end
+  end
+
+  defp completion_result({:ok, %{status: :completed}}, run, intake, pid, sprite_prefix) do
+    if run.failures == [] do
+      {:ok, Map.merge(run, %{status: :completed, error: nil, pid: pid})}
+    else
+      maybe_cleanup_sprite(intake, pid, run.productions, sprite_prefix)
+
+      {:ok,
+       Map.merge(run, %{
+         status: :failed,
+         result: nil,
+         error: {:pipeline_failed, run.failures},
+         pid: pid
+       })}
+    end
+  end
+
+  defp completion_result({:ok, %{status: :failed}}, run, intake, pid, sprite_prefix) do
+    maybe_cleanup_sprite(intake, pid, run.productions, sprite_prefix)
+    {:ok, Map.merge(run, %{status: :failed, result: nil, error: :pipeline_failed, pid: pid})}
+  end
+
+  defp completion_result({:error, reason}, run, intake, pid, sprite_prefix) do
+    maybe_cleanup_sprite(intake, pid, run.productions, sprite_prefix)
+    {:error, reason, Map.merge(run, %{status: :error, result: nil, error: reason, pid: pid})}
+  end
+
+  defp emit_pipeline_completion({:ok, run}, pipeline_meta) do
+    Observe.emit(
+      Observe.pipeline(:stop),
+      %{system_time: System.system_time()},
+      Map.merge(pipeline_meta, %{status: run.status, error: inspect(run.error)})
+    )
+  end
+
+  defp emit_pipeline_completion({:error, reason, run}, pipeline_meta) do
+    Observe.emit(
+      Observe.pipeline(:exception),
+      %{system_time: System.system_time()},
+      Map.merge(pipeline_meta, %{status: run.status, error: inspect(reason)})
+    )
   end
 
   @spec ensure_observer(keyword(), String.t()) :: {pid() | nil, boolean()}
@@ -121,22 +136,22 @@ defmodule Jido.Lib.Github.AgentRuntime do
         {pid, false}
 
       _ ->
-        case Keyword.get(opts, :observer) do
-          shell when is_atom(shell) ->
-            if function_exported?(shell, :info, 1) do
-              case start_observer(shell, label) do
-                pid when is_pid(pid) -> {pid, true}
-                _ -> {nil, false}
-              end
-            else
-              {nil, false}
-            end
-
-          _ ->
-            {nil, false}
-        end
+        maybe_start_observer(Keyword.get(opts, :observer), label)
     end
   end
+
+  defp maybe_start_observer(shell, label) when is_atom(shell) and is_binary(label) do
+    if function_exported?(shell, :info, 1) do
+      observer_start_result(start_observer(shell, label))
+    else
+      {nil, false}
+    end
+  end
+
+  defp maybe_start_observer(_shell, _label), do: {nil, false}
+
+  defp observer_start_result(pid) when is_pid(pid), do: {pid, true}
+  defp observer_start_result(_), do: {nil, false}
 
   @spec stop_observer(pid() | nil) :: :ok
   def stop_observer(pid) when is_pid(pid) do

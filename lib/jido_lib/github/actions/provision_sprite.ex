@@ -38,28 +38,28 @@ defmodule Jido.Lib.Github.Actions.ProvisionSprite do
     session_mod = params[:shell_session_mod] || Jido.Shell.ShellSession
     agent_mod = params[:shell_agent_mod] || Jido.Shell.Agent
 
-    with {:ok, provisioned} <-
-           Exec.provision_workspace("triage-#{params.run_id}",
-             sprite_config: sprite_config,
-             session_mod: session_mod,
-             agent_mod: agent_mod,
-             timeout: params[:timeout] || 30_000,
-             workspace_dir: workspace_dir,
-             sprite_name: sprite_name
-           ) do
-      passthrough = Helpers.pass_through(params)
+    case Exec.provision_workspace("triage-#{params.run_id}",
+           sprite_config: sprite_config,
+           session_mod: session_mod,
+           agent_mod: agent_mod,
+           timeout: params[:timeout] || 30_000,
+           workspace_dir: workspace_dir,
+           sprite_name: sprite_name
+         ) do
+      {:ok, provisioned} ->
+        passthrough = Helpers.pass_through(params)
 
-      {:ok,
-       Map.merge(passthrough, %{
-         session_id: provisioned.session_id,
-         sprite_name: provisioned.sprite_name,
-         workspace_dir: provisioned.workspace_dir,
-         timeout: params[:timeout] || 300_000,
-         shell_agent_mod: agent_mod,
-         shell_session_mod: session_mod,
-         sprite_config: sprite_config
-       })}
-    else
+        {:ok,
+         Map.merge(passthrough, %{
+           session_id: provisioned.session_id,
+           sprite_name: provisioned.sprite_name,
+           workspace_dir: provisioned.workspace_dir,
+           timeout: params[:timeout] || 300_000,
+           shell_agent_mod: agent_mod,
+           shell_session_mod: session_mod,
+           sprite_config: sprite_config
+         })}
+
       {:error, reason} ->
         {:error, {:provision_sprite_failed, reason}}
     end

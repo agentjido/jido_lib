@@ -107,202 +107,125 @@ defmodule Jido.Lib.Test.FakeShellAgent do
   end
 
   defp scripted_response(command) do
-    cond do
-      env_probe_command?(command) ->
-        env_probe_response(command)
+    env_probe_or_nil(command) ||
+      env_presence_or_nil(command) ||
+      tool_presence_or_nil(command) ||
+      static_command_response(command) ||
+      {:ok, "ok"}
+  end
 
-      String.contains?(command, "gh repo view") and
-          String.contains?(command, "defaultBranchRef") ->
-        {:ok, "main"}
+  defp env_probe_or_nil(command) do
+    if env_probe_command?(command), do: env_probe_response(command), else: nil
+  end
 
-      String.contains?(command, "${GH_TOKEN:-}") and
-        String.contains?(command, "${GITHUB_TOKEN:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp env_presence_or_nil(command) do
+    command_rules = [
+      {["${GH_TOKEN:-}", "${GITHUB_TOKEN:-}", "echo present"], {:ok, "present"}},
+      {["${ANTHROPIC_AUTH_TOKEN:-}", "echo present"], {:ok, "present"}},
+      {["${ANTHROPIC_API_KEY:-}", "echo present"], {:ok, "present"}},
+      {["${CLAUDE_CODE_API_KEY:-}", "echo present"], {:ok, "present"}},
+      {["${OPENAI_API_KEY:-}", "echo present"], {:ok, "present"}},
+      {["${AMP_API_KEY:-}", "echo present"], {:ok, "present"}},
+      {["${GEMINI_API_KEY:-}", "echo present"], {:ok, "present"}},
+      {["${GOOGLE_API_KEY:-}", "echo present"], {:ok, "present"}},
+      {["${GOOGLE_GENAI_USE_VERTEXAI:-}", "echo present"], {:ok, "present"}},
+      {["${GOOGLE_GENAI_USE_GCA:-}", "echo present"], {:ok, "present"}},
+      {["ANTHROPIC_BASE_URL", "echo present"], {:ok, "present"}},
+      {["CLAUDE_CODE_API_KEY", "ANTHROPIC_AUTH_TOKEN"], {:ok, "ANTHROPIC_AUTH_TOKEN"}}
+    ]
 
-      String.contains?(command, "${ANTHROPIC_AUTH_TOKEN:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+    match_command_rules(command, command_rules)
+  end
 
-      String.contains?(command, "${ANTHROPIC_API_KEY:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp tool_presence_or_nil(command) do
+    tools = ["gh", "git", "claude", "amp", "codex", "gemini"]
 
-      String.contains?(command, "${CLAUDE_CODE_API_KEY:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+    if Enum.any?(tools, &tool_check?(command, &1)), do: {:ok, "present"}, else: nil
+  end
 
-      String.contains?(command, "${OPENAI_API_KEY:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp static_command_response(command) do
+    command_rules = [
+      {["gh repo view", "defaultBranchRef"], {:ok, "main"}},
+      {["gh auth status"], {:ok, "authenticated"}},
+      {["gh auth setup-git"], {:ok, "configured"}},
+      {["gh api user --jq .login"], {:ok, "testuser"}},
+      {["claude --help"], {:ok, "--output-format stream-json --include-partial-messages"}},
+      {["amp --help"], {:ok, "--execute --stream-json --dangerously-allow-all"}},
+      {["codex --help"], {:ok, "codex exec --json --full-auto"}},
+      {["codex exec --help"], {:ok, "exec --json"}},
+      {["gemini --help"], {:ok, "--output-format stream-json --approval-mode"}},
+      {["codex login --with-api-key"], {:ok, "ok"}},
+      {["codex login status"], {:ok, "ok"}},
+      {["gh issue view"], &issue_view_response/0},
+      {["git clone"], {:ok, "Cloning into '/tmp/repo'..."}},
+      {["git fetch origin"], {:ok, "Fetched"}},
+      {["git checkout -b"], {:ok, "Switched to a new branch"}},
+      {["git checkout"], {:ok, "Switched branch"}},
+      {["git pull --ff-only origin"], {:ok, "Already up to date."}},
+      {["git show-ref --verify --quiet"], {:ok, "missing"}},
+      {["git ls-remote --exit-code --heads"], {:ok, "missing"}},
+      {["git rev-list --count"], {:ok, "1"}},
+      {["git status --porcelain"], {:ok, ""}},
+      {["git rev-parse HEAD"], {:ok, "head-sha-123"}},
+      {["git rev-parse"], {:ok, "base-sha-main"}},
+      {["git add -A && git commit -m"], {:ok, "[feature 123] fix commit"}},
+      {["git remote get-url origin"], {:ok, "https://github.com/test/repo.git"}},
+      {["git push -u origin"], {:ok, "branch pushed"}},
+      {["gh pr list"], {:ok, "[]"}},
+      {["gh pr create"], {:ok, "https://github.com/test/repo/pull/7"}},
+      {["mix deps.get"], {:ok, "Resolved and locked"}},
+      {["mix compile"], {:ok, "Compiled 42 files"}},
+      {["claude -p"], &claude_prompt_response/0},
+      {["gh issue comment"], {:ok, "https://github.com/test/repo/issues/42#issuecomment-1"}}
+    ]
 
-      String.contains?(command, "${AMP_API_KEY:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+    match_command_rules(command, command_rules)
+  end
 
-      String.contains?(command, "${GEMINI_API_KEY:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp match_command_rules(command, rules) when is_binary(command) and is_list(rules) do
+    Enum.find_value(rules, fn {patterns, response} ->
+      if matches_all?(command, patterns), do: resolve_response(response), else: nil
+    end)
+  end
 
-      String.contains?(command, "${GOOGLE_API_KEY:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp matches_all?(command, patterns) when is_binary(command) and is_list(patterns) do
+    Enum.all?(patterns, &String.contains?(command, &1))
+  end
 
-      String.contains?(command, "${GOOGLE_GENAI_USE_VERTEXAI:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp resolve_response(response) when is_function(response, 0), do: response.()
+  defp resolve_response(response), do: response
 
-      String.contains?(command, "${GOOGLE_GENAI_USE_GCA:-}") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
+  defp issue_view_response do
+    {:ok,
+     Jason.encode!(%{
+       "title" => "Bug: Widget crashes on nil",
+       "body" => "Widget.call/1 crashes when passed nil input.",
+       "labels" => [%{"name" => "bug"}],
+       "author" => %{"login" => "testuser"},
+       "state" => "OPEN",
+       "url" => "https://github.com/test/repo/issues/42"
+     })}
+  end
 
-      tool_check?(command, "gh") ->
-        {:ok, "present"}
-
-      tool_check?(command, "git") ->
-        {:ok, "present"}
-
-      tool_check?(command, "claude") ->
-        {:ok, "present"}
-
-      tool_check?(command, "amp") ->
-        {:ok, "present"}
-
-      tool_check?(command, "codex") ->
-        {:ok, "present"}
-
-      tool_check?(command, "gemini") ->
-        {:ok, "present"}
-
-      String.contains?(command, "ANTHROPIC_BASE_URL") and
-          String.contains?(command, "echo present") ->
-        {:ok, "present"}
-
-      String.contains?(command, "CLAUDE_CODE_API_KEY") and
-          String.contains?(command, "ANTHROPIC_AUTH_TOKEN") ->
-        {:ok, "ANTHROPIC_AUTH_TOKEN"}
-
-      String.contains?(command, "gh auth status") ->
-        {:ok, "authenticated"}
-
-      String.contains?(command, "gh auth setup-git") ->
-        {:ok, "configured"}
-
-      String.contains?(command, "gh api user --jq .login") ->
-        {:ok, "testuser"}
-
-      String.contains?(command, "claude --help") ->
-        {:ok, "--output-format stream-json --include-partial-messages"}
-
-      String.contains?(command, "amp --help") ->
-        {:ok, "--execute --stream-json --dangerously-allow-all"}
-
-      String.contains?(command, "codex --help") ->
-        {:ok, "codex exec --json --full-auto"}
-
-      String.contains?(command, "codex exec --help") ->
-        {:ok, "exec --json"}
-
-      String.contains?(command, "gemini --help") ->
-        {:ok, "--output-format stream-json --approval-mode"}
-
-      String.contains?(command, "codex login --with-api-key") ->
-        {:ok, "ok"}
-
-      String.contains?(command, "codex login status") ->
-        {:ok, "ok"}
-
-      String.contains?(command, "gh issue view") ->
-        {:ok,
-         Jason.encode!(%{
-           "title" => "Bug: Widget crashes on nil",
-           "body" => "Widget.call/1 crashes when passed nil input.",
-           "labels" => [%{"name" => "bug"}],
-           "author" => %{"login" => "testuser"},
-           "state" => "OPEN",
-           "url" => "https://github.com/test/repo/issues/42"
-         })}
-
-      String.contains?(command, "git clone") ->
-        {:ok, "Cloning into '/tmp/repo'..."}
-
-      String.contains?(command, "git fetch origin") ->
-        {:ok, "Fetched"}
-
-      String.contains?(command, "git checkout -b") ->
-        {:ok, "Switched to a new branch"}
-
-      String.contains?(command, "git checkout") ->
-        {:ok, "Switched branch"}
-
-      String.contains?(command, "git pull --ff-only origin") ->
-        {:ok, "Already up to date."}
-
-      String.contains?(command, "git show-ref --verify --quiet") ->
-        {:ok, "missing"}
-
-      String.contains?(command, "git ls-remote --exit-code --heads") ->
-        {:ok, "missing"}
-
-      String.contains?(command, "git rev-list --count") ->
-        {:ok, "1"}
-
-      String.contains?(command, "git status --porcelain") ->
-        {:ok, ""}
-
-      String.contains?(command, "git rev-parse HEAD") ->
-        {:ok, "head-sha-123"}
-
-      String.contains?(command, "git rev-parse") ->
-        {:ok, "base-sha-main"}
-
-      String.contains?(command, "git add -A && git commit -m") ->
-        {:ok, "[feature 123] fix commit"}
-
-      String.contains?(command, "git remote get-url origin") ->
-        {:ok, "https://github.com/test/repo.git"}
-
-      String.contains?(command, "git push -u origin") ->
-        {:ok, "branch pushed"}
-
-      String.contains?(command, "gh pr list") ->
-        {:ok, "[]"}
-
-      String.contains?(command, "gh pr create") ->
-        {:ok, "https://github.com/test/repo/pull/7"}
-
-      String.contains?(command, "mix deps.get") ->
-        {:ok, "Resolved and locked"}
-
-      String.contains?(command, "mix compile") ->
-        {:ok, "Compiled 42 files"}
-
-      String.contains?(command, "claude -p") ->
-        {:ok,
-         [
-           Jason.encode!(%{"type" => "system", "subtype" => "init", "model" => "claude-test"}),
-           Jason.encode!(%{
-             "type" => "stream_event",
-             "event" => %{
-               "type" => "content_block_delta",
-               "delta" => %{"type" => "text_delta", "text" => "## Investigation Report\n\n"}
-             }
-           }),
-           Jason.encode!(%{
-             "type" => "result",
-             "subtype" => "success",
-             "is_error" => false,
-             "result" => "## Investigation Report\n\nRoot cause found."
-           })
-         ]
-         |> Enum.join("\n")}
-
-      String.contains?(command, "gh issue comment") ->
-        {:ok, "https://github.com/test/repo/issues/42#issuecomment-1"}
-
-      true ->
-        {:ok, "ok"}
-    end
+  defp claude_prompt_response do
+    {:ok,
+     [
+       Jason.encode!(%{"type" => "system", "subtype" => "init", "model" => "claude-test"}),
+       Jason.encode!(%{
+         "type" => "stream_event",
+         "event" => %{
+           "type" => "content_block_delta",
+           "delta" => %{"type" => "text_delta", "text" => "## Investigation Report\n\n"}
+         }
+       }),
+       Jason.encode!(%{
+         "type" => "result",
+         "subtype" => "success",
+         "is_error" => false,
+         "result" => "## Investigation Report\n\nRoot cause found."
+       })
+     ]
+     |> Enum.join("\n")}
   end
 
   defp env_probe_command?(command) when is_binary(command) do

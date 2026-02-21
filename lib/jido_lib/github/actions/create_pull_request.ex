@@ -30,21 +30,19 @@ defmodule Jido.Lib.Github.Actions.CreatePullRequest do
     agent_mod = params[:shell_agent_mod] || Jido.Shell.Agent
     timeout = params[:timeout] || 300_000
 
-    with {:ok, existing} <- find_existing_pr(params, agent_mod, timeout) do
-      case existing do
-        %{} = pr ->
-          {:ok,
-           Map.merge(Helpers.pass_through(params), %{
-             pr_created: false,
-             pr_number: pr[:number],
-             pr_url: pr[:url],
-             pr_title: pr[:title]
-           })}
+    case find_existing_pr(params, agent_mod, timeout) do
+      {:ok, %{} = pr} ->
+        {:ok,
+         Map.merge(Helpers.pass_through(params), %{
+           pr_created: false,
+           pr_number: pr[:number],
+           pr_url: pr[:url],
+           pr_title: pr[:title]
+         })}
 
-        nil ->
-          create_pr(params, agent_mod, timeout)
-      end
-    else
+      {:ok, nil} ->
+        create_pr(params, agent_mod, timeout)
+
       {:error, reason} ->
         {:error, {:create_pull_request_failed, reason}}
     end
@@ -121,7 +119,6 @@ defmodule Jido.Lib.Github.Actions.CreatePullRequest do
     else
       false -> {:error, :invalid_pr_list}
       {:error, reason} -> {:error, reason}
-      _ -> {:error, :invalid_pr_list}
     end
   end
 
@@ -143,8 +140,6 @@ defmodule Jido.Lib.Github.Actions.CreatePullRequest do
       _ -> nil
     end
   end
-
-  defp extract_url(_), do: nil
 
   defp extract_number(url) when is_binary(url) do
     case Regex.run(~r{/pull/(\d+)}, url) do
