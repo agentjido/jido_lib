@@ -3,7 +3,7 @@ defmodule Jido.Lib.Bots.Foundation.RunContext do
   Validated intake envelope for dual-role writer/critic bot runs.
   """
 
-  alias Jido.Lib.Github.Actions.ValidateHostEnv
+  alias Jido.Lib.Bots.Foundation.Intake
   alias Jido.Lib.Github.Helpers
 
   @schema Zoi.struct(
@@ -156,85 +156,27 @@ defmodule Jido.Lib.Bots.Foundation.RunContext do
   end
 
   defp normalize_run_id(attrs) do
-    run_id =
-      case Map.get(attrs, :run_id) do
-        value when is_binary(value) and value != "" ->
-          value
-
-        _ ->
-          :crypto.strong_rand_bytes(6)
-          |> Base.encode16(case: :lower)
-      end
-
-    Map.put(attrs, :run_id, run_id)
+    Map.put(attrs, :run_id, Intake.normalize_run_id(Map.get(attrs, :run_id)))
   end
 
   defp normalize_setup_commands(attrs) do
-    commands =
-      attrs
-      |> Map.get(:setup_commands, [])
-      |> normalize_command_list()
-
+    commands = attrs |> Map.get(:setup_commands, []) |> Intake.normalize_commands()
     Map.put(attrs, :setup_commands, commands)
   end
 
-  defp normalize_command_list(nil), do: []
-
-  defp normalize_command_list(value) when is_binary(value) do
-    case String.trim(value) do
-      "" -> []
-      command -> [command]
-    end
-  end
-
-  defp normalize_command_list(values) when is_list(values) do
-    values
-    |> Enum.flat_map(&normalize_command_list/1)
-  end
-
-  defp normalize_command_list(_), do: []
-
   defp normalize_sprite_config(attrs) do
-    default_env = build_default_sprite_env(attrs)
+    providers = [
+      Map.get(attrs, :writer_provider, :claude),
+      Map.get(attrs, :critic_provider, :codex)
+    ]
 
     config =
-      case Map.get(attrs, :sprite_config) do
-        %{} = map when map_size(map) > 0 ->
-          merge_sprite_config_defaults(map, default_env)
-
-        _ ->
-          %{
-            token: System.get_env("SPRITES_TOKEN"),
-            create: true,
-            env: default_env
-          }
-      end
+      Intake.build_sprite_config(
+        providers,
+        Map.get(attrs, :sprite_config)
+      )
 
     Map.put(attrs, :sprite_config, config)
-  end
-
-  defp build_default_sprite_env(attrs) when is_map(attrs) do
-    [Map.get(attrs, :writer_provider, :claude), Map.get(attrs, :critic_provider, :codex)]
-    |> Enum.uniq()
-    |> Enum.reduce(%{}, fn provider, env ->
-      Map.merge(env, ValidateHostEnv.build_sprite_env(provider))
-    end)
-  end
-
-  defp merge_sprite_config_defaults(config, default_env) when is_map(config) do
-    existing_env =
-      case Helpers.map_get(config, :env, %{}) do
-        %{} = env -> env
-        _ -> %{}
-      end
-
-    token = Helpers.map_get(config, :token, System.get_env("SPRITES_TOKEN"))
-    create = Helpers.map_get(config, :create, true)
-
-    config
-    |> Map.put(:token, token)
-    |> Map.put(:create, create)
-    |> Map.put(:env, Map.merge(default_env, existing_env))
   end
 
   defp validate_revision_budget(max_revisions) when max_revisions in [0, 1], do: :ok

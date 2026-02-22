@@ -10,6 +10,7 @@ defmodule Jido.Lib.Github.Agents.QualityBot do
     strategy: {Jido.Runic.Strategy, workflow_fn: &__MODULE__.build_workflow/0},
     schema: []
 
+  alias Jido.Lib.Bots.Foundation.Intake
   alias Jido.Lib.Bots.{Result, Runtime}
   alias Jido.Lib.Github.Actions
   alias Jido.Lib.Github.AgentRuntime
@@ -57,13 +58,13 @@ defmodule Jido.Lib.Github.Agents.QualityBot do
   @doc "Run quality bot for a target (local path or owner/repo slug)."
   @spec run_target(String.t(), keyword()) :: map()
   def run_target(target, opts \\ []) when is_binary(target) and is_list(opts) do
-    run_id = normalize_run_id(Keyword.get(opts, :run_id))
+    run_id = Intake.normalize_run_id(Keyword.get(opts, :run_id))
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
 
     intake = %{
       target: target,
       run_id: run_id,
-      provider: normalize_provider(Keyword.get(opts, :provider, :codex)),
+      provider: Intake.normalize_provider(Keyword.get(opts, :provider, :codex), :codex),
       timeout: timeout,
       mode: if(Keyword.get(opts, :apply, false), do: :safe_fix, else: :report),
       apply: Keyword.get(opts, :apply, false),
@@ -113,18 +114,5 @@ defmodule Jido.Lib.Github.Agents.QualityBot do
   rescue
     error ->
       {:error, error}
-  end
-
-  defp normalize_run_id(run_id) when is_binary(run_id) and run_id != "", do: run_id
-
-  defp normalize_run_id(_run_id) do
-    :crypto.strong_rand_bytes(6)
-    |> Base.encode16(case: :lower)
-  end
-
-  defp normalize_provider(provider) do
-    Helpers.provider_normalize!(provider)
-  rescue
-    _ -> :codex
   end
 end

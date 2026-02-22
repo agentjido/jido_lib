@@ -13,8 +13,9 @@ defmodule Jido.Lib.Github.Agents.PrBot do
     strategy: {Jido.Runic.Strategy, workflow_fn: &__MODULE__.build_workflow/0},
     schema: []
 
+  alias Jido.Lib.Bots.Foundation.Intake
+  alias Jido.Lib.Bots.Runtime
   alias Jido.Lib.Github.Actions
-  alias Jido.Lib.Github.Actions.ValidateHostEnv
   alias Jido.Lib.Github.AgentRuntime
   alias Jido.Lib.Github.Helpers
   alias Jido.Lib.Github.Plugins.{Observability, RuntimeContext}
@@ -153,22 +154,14 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   @spec build_intake(String.t(), keyword()) :: map()
   def build_intake(issue_url, opts \\ []) when is_binary(issue_url) and is_list(opts) do
     {owner, repo, issue_number} = parse_issue_url(issue_url)
-    provider = Helpers.provider_normalize!(Keyword.get(opts, :provider, :claude))
+    provider = Intake.normalize_provider!(Keyword.get(opts, :provider, :claude), :claude)
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
-    run_id = normalize_run_id(Keyword.get(opts, :run_id))
+    run_id = Intake.normalize_run_id(Keyword.get(opts, :run_id))
+    sprite_config = Intake.build_sprite_config(provider, Keyword.get(opts, :sprite_config))
+    setup_commands = opts |> Keyword.get(:setup_commands, []) |> Intake.normalize_commands()
 
-    sprite_config =
-      case Keyword.get(opts, :sprite_config) do
-        %{} = config ->
-          config
-
-        _ ->
-          %{
-            token: System.get_env("SPRITES_TOKEN"),
-            create: true,
-            env: ValidateHostEnv.build_sprite_env(provider)
-          }
-      end
+    check_commands =
+      opts |> Keyword.get(:check_commands, @default_check_commands) |> Intake.normalize_commands()
 
     %{
       provider: provider,
@@ -182,8 +175,8 @@ defmodule Jido.Lib.Github.Agents.PrBot do
       timeout: timeout,
       keep_sprite: Keyword.get(opts, :keep_sprite, false),
       keep_workspace: Keyword.get(opts, :keep_workspace, false),
-      setup_commands: Keyword.get(opts, :setup_commands, []),
-      check_commands: Keyword.get(opts, :check_commands, @default_check_commands),
+      setup_commands: setup_commands,
+      check_commands: check_commands,
       base_branch: Keyword.get(opts, :base_branch),
       branch_prefix: Keyword.get(opts, :branch_prefix, "jido/prbot"),
       sprite_config: sprite_config,
@@ -208,7 +201,7 @@ defmodule Jido.Lib.Github.Agents.PrBot do
   end
 
   defp run_pipeline(intake, opts) do
-    AgentRuntime.run_pipeline(__MODULE__, intake,
+    Runtime.run_pipeline(__MODULE__, intake,
       jido: Keyword.fetch!(opts, :jido),
       timeout: Keyword.fetch!(opts, :timeout),
       debug: Keyword.get(opts, :debug, true),
@@ -217,19 +210,8 @@ defmodule Jido.Lib.Github.Agents.PrBot do
     )
   end
 
-  defp generate_run_id do
-    :crypto.strong_rand_bytes(6)
-    |> Base.encode16(case: :lower)
-  end
-
-  defp normalize_run_id(run_id) when is_binary(run_id) do
-    if String.trim(run_id) == "", do: generate_run_id(), else: run_id
-  end
-
-  defp normalize_run_id(_), do: generate_run_id()
-
   defp normalize_intake_provider!(intake) when is_map(intake) do
-    provider = Helpers.provider_normalize!(Helpers.map_get(intake, :provider, :claude))
+    provider = Intake.normalize_provider!(Helpers.map_get(intake, :provider, :claude), :claude)
     agent_mode = normalize_agent_mode(Helpers.map_get(intake, :agent_mode, :coding), :coding)
 
     intake

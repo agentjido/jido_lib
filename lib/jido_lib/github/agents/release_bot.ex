@@ -10,6 +10,7 @@ defmodule Jido.Lib.Github.Agents.ReleaseBot do
     strategy: {Jido.Runic.Strategy, workflow_fn: &__MODULE__.build_workflow/0},
     schema: []
 
+  alias Jido.Lib.Bots.Foundation.Intake
   alias Jido.Lib.Bots.{Result, Runtime}
   alias Jido.Lib.Github.Actions
   alias Jido.Lib.Github.Actions.Release
@@ -60,14 +61,14 @@ defmodule Jido.Lib.Github.Agents.ReleaseBot do
   @doc "Run release workflow for repo slug (owner/repo)."
   @spec run_repo(String.t(), keyword()) :: map()
   def run_repo(repo, opts \\ []) when is_binary(repo) and is_list(opts) do
-    run_id = normalize_run_id(Keyword.get(opts, :run_id))
+    run_id = Intake.normalize_run_id(Keyword.get(opts, :run_id))
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
 
     intake = %{
       repo: repo,
       owner: repo |> String.split("/", parts: 2) |> List.first(),
       run_id: run_id,
-      provider: normalize_provider(Keyword.get(opts, :provider, :codex)),
+      provider: Intake.normalize_provider(Keyword.get(opts, :provider, :codex), :codex),
       timeout: timeout,
       release_type: normalize_release_type(Keyword.get(opts, :release_type, :auto)),
       publish: Keyword.get(opts, :publish, false),
@@ -122,23 +123,10 @@ defmodule Jido.Lib.Github.Agents.ReleaseBot do
       {:error, error}
   end
 
-  defp normalize_provider(provider) do
-    Helpers.provider_normalize!(provider)
-  rescue
-    _ -> :codex
-  end
-
   defp normalize_release_type(type) when type in [:patch, :minor, :major, :auto], do: type
   defp normalize_release_type("patch"), do: :patch
   defp normalize_release_type("minor"), do: :minor
   defp normalize_release_type("major"), do: :major
   defp normalize_release_type("auto"), do: :auto
   defp normalize_release_type(_), do: :auto
-
-  defp normalize_run_id(run_id) when is_binary(run_id) and run_id != "", do: run_id
-
-  defp normalize_run_id(_run_id) do
-    :crypto.strong_rand_bytes(6)
-    |> Base.encode16(case: :lower)
-  end
 end

@@ -8,6 +8,7 @@ defmodule Jido.Lib.Github.Agents.RoadmapBot do
     strategy: {Jido.Runic.Strategy, workflow_fn: &__MODULE__.build_workflow/0},
     schema: []
 
+  alias Jido.Lib.Bots.Foundation.Intake
   alias Jido.Lib.Bots.{Result, Runtime}
   alias Jido.Lib.Github.Actions
   alias Jido.Lib.Github.Actions.Roadmap
@@ -55,13 +56,13 @@ defmodule Jido.Lib.Github.Agents.RoadmapBot do
   @doc "Run roadmap workflow for repo slug (owner/repo) or local path."
   @spec run_plan(String.t(), keyword()) :: map()
   def run_plan(repo, opts \\ []) when is_binary(repo) and is_list(opts) do
-    run_id = normalize_run_id(Keyword.get(opts, :run_id))
+    run_id = Intake.normalize_run_id(Keyword.get(opts, :run_id))
     timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
 
     intake = %{
       repo: repo,
       run_id: run_id,
-      provider: normalize_provider(Keyword.get(opts, :provider, :codex)),
+      provider: Intake.normalize_provider(Keyword.get(opts, :provider, :codex), :codex),
       timeout: timeout,
       stories_dirs: normalize_stories_dirs(Keyword.get(opts, :stories_dirs, ["specs/stories"])),
       traceability_file: Keyword.get(opts, :traceability_file),
@@ -121,12 +122,6 @@ defmodule Jido.Lib.Github.Agents.RoadmapBot do
       {:error, error}
   end
 
-  defp normalize_provider(provider) do
-    Helpers.provider_normalize!(provider)
-  rescue
-    _ -> :codex
-  end
-
   defp normalize_stories_dirs(nil), do: ["specs/stories"]
   defp normalize_stories_dirs(value) when is_binary(value), do: [value]
 
@@ -143,11 +138,4 @@ defmodule Jido.Lib.Github.Agents.RoadmapBot do
   end
 
   defp normalize_stories_dirs(_), do: ["specs/stories"]
-
-  defp normalize_run_id(run_id) when is_binary(run_id) and run_id != "", do: run_id
-
-  defp normalize_run_id(_run_id) do
-    :crypto.strong_rand_bytes(6)
-    |> Base.encode16(case: :lower)
-  end
 end
