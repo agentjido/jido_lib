@@ -195,20 +195,46 @@ defmodule Jido.Lib.Bots.Foundation.RunContext do
   defp normalize_command_list(_), do: []
 
   defp normalize_sprite_config(attrs) do
+    default_env = build_default_sprite_env(attrs)
+
     config =
       case Map.get(attrs, :sprite_config) do
         %{} = map when map_size(map) > 0 ->
-          map
+          merge_sprite_config_defaults(map, default_env)
 
         _ ->
           %{
             token: System.get_env("SPRITES_TOKEN"),
             create: true,
-            env: ValidateHostEnv.build_sprite_env(Map.get(attrs, :writer_provider, :claude))
+            env: default_env
           }
       end
 
     Map.put(attrs, :sprite_config, config)
+  end
+
+  defp build_default_sprite_env(attrs) when is_map(attrs) do
+    [Map.get(attrs, :writer_provider, :claude), Map.get(attrs, :critic_provider, :codex)]
+    |> Enum.uniq()
+    |> Enum.reduce(%{}, fn provider, env ->
+      Map.merge(env, ValidateHostEnv.build_sprite_env(provider))
+    end)
+  end
+
+  defp merge_sprite_config_defaults(config, default_env) when is_map(config) do
+    existing_env =
+      case Helpers.map_get(config, :env, %{}) do
+        %{} = env -> env
+        _ -> %{}
+      end
+
+    token = Helpers.map_get(config, :token, System.get_env("SPRITES_TOKEN"))
+    create = Helpers.map_get(config, :create, true)
+
+    config
+    |> Map.put(:token, token)
+    |> Map.put(:create, create)
+    |> Map.put(:env, Map.merge(default_env, existing_env))
   end
 
   defp validate_revision_budget(max_revisions) when max_revisions in [0, 1], do: :ok
