@@ -56,6 +56,18 @@ defmodule Jido.Lib.Github.Observe do
   @spec coding_agent(atom()) :: event_name()
   def coding_agent(event), do: [:jido, :lib, :github, :coding_agent, event]
 
+  @doc "Builds a canonical quality bot telemetry event path."
+  @spec quality(atom()) :: event_name()
+  def quality(event), do: [:jido, :lib, :github, :quality, event]
+
+  @doc "Builds a canonical release bot telemetry event path."
+  @spec release(atom()) :: event_name()
+  def release(event), do: [:jido, :lib, :github, :release, event]
+
+  @doc "Builds a canonical roadmap bot telemetry event path."
+  @spec roadmap(atom()) :: event_name()
+  def roadmap(event), do: [:jido, :lib, :github, :roadmap, event]
+
   @doc "Builds a canonical Runic telemetry event path."
   @spec runic(atom()) :: event_name()
   def runic(event), do: [:jido, :runic, event]

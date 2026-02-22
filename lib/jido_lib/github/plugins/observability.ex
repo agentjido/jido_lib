@@ -48,6 +48,22 @@ defmodule Jido.Lib.Github.Plugins.Observability do
         print_coding_agent_signal(shell, label, type, data)
         delta_count
 
+      String.starts_with?(type, "jido.lib.github.bot_run.") ->
+        print_bot_runtime_signal(shell, label, type, data)
+        delta_count
+
+      String.starts_with?(type, "jido.lib.github.quality.") ->
+        print_bot_family_signal(shell, label, "Quality", type, data)
+        delta_count
+
+      String.starts_with?(type, "jido.lib.github.release.") ->
+        print_bot_family_signal(shell, label, "Release", type, data)
+        delta_count
+
+      String.starts_with?(type, "jido.lib.github.roadmap.") ->
+        print_bot_family_signal(shell, label, "Roadmap", type, data)
+        delta_count
+
       type == "jido.lib.github.validate_runtime.checked" ->
         shell.info("[#{label}][Runtime] #{runtime_summary(data)}")
         delta_count
@@ -90,6 +106,22 @@ defmodule Jido.Lib.Github.Plugins.Observability do
   end
 
   defp print_coding_agent_signal(_shell, _label, _type, _data), do: :ok
+
+  defp print_bot_runtime_signal(shell, label, type, data) do
+    bot = Helpers.map_get(data, :bot, "unknown")
+    status = Helpers.map_get(data, :status, "unknown")
+    error = Helpers.map_get(data, :error)
+
+    shell.info(
+      "[#{label}][BotRuntime] bot=#{bot} type=#{type} status=#{status} error=#{error || "none"}"
+    )
+  end
+
+  defp print_bot_family_signal(shell, label, family, type, data) do
+    status = Helpers.map_get(data, :status, "unknown")
+    summary = Helpers.map_get(data, :summary, "")
+    shell.info("[#{label}][#{family}] type=#{type} status=#{status} #{summary}")
+  end
 
   defp runtime_summary(data) do
     checks = Helpers.map_get(data, :runtime_checks, %{})

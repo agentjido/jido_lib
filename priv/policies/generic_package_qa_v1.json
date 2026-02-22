@@ -1,0 +1,179 @@
+{
+  "baseline": "generic_package_qa_v1",
+  "version": 1,
+  "validation_commands": [
+    "mix quality"
+  ],
+  "rules": [
+    {
+      "id": "qa.required.readme",
+      "description": "README.md exists",
+      "severity": "high",
+      "applies_to": [
+        "README.md"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": "README.md"
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.required.changelog",
+      "description": "CHANGELOG.md exists",
+      "severity": "high",
+      "applies_to": [
+        "CHANGELOG.md"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": "CHANGELOG.md"
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.required.license",
+      "description": "LICENSE exists",
+      "severity": "high",
+      "applies_to": [
+        "LICENSE"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": "LICENSE"
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.required.agents",
+      "description": "AGENTS.md exists",
+      "severity": "medium",
+      "applies_to": [
+        "AGENTS.md"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": "AGENTS.md"
+      },
+      "autofix": true,
+      "autofix_strategy": "doctor_stub",
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.required.formatter",
+      "description": ".formatter.exs exists",
+      "severity": "medium",
+      "applies_to": [
+        ".formatter.exs"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": ".formatter.exs"
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.required.ci_workflow",
+      "description": "CI workflow exists",
+      "severity": "high",
+      "applies_to": [
+        ".github/workflows/ci.yml"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": ".github/workflows/ci.yml"
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.required.release_workflow",
+      "description": "Release workflow exists",
+      "severity": "medium",
+      "applies_to": [
+        ".github/workflows/release.yml"
+      ],
+      "check": {
+        "kind": "file_exists",
+        "path": ".github/workflows/release.yml"
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#required-files"
+    },
+    {
+      "id": "qa.mix.elixir_1_18",
+      "description": "mix.exs pins Elixir ~> 1.18",
+      "severity": "high",
+      "applies_to": [
+        "mix.exs"
+      ],
+      "check": {
+        "kind": "regex",
+        "path": "mix.exs",
+        "pattern": "elixir:\\s*\"~>\\s*1\\.18\""
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#mixexs-configuration"
+    },
+    {
+      "id": "qa.mix.quality_alias",
+      "description": "mix.exs defines quality alias",
+      "severity": "medium",
+      "applies_to": [
+        "mix.exs"
+      ],
+      "check": {
+        "kind": "regex",
+        "path": "mix.exs",
+        "pattern": "quality:\\s*\\["
+      },
+      "autofix": true,
+      "autofix_strategy": "quality_alias",
+      "docs_ref": "GENERIC_PACKAGE_QA.md#mixexs-configuration"
+    },
+    {
+      "id": "qa.mix.setup_alias",
+      "description": "mix.exs defines setup alias",
+      "severity": "low",
+      "applies_to": [
+        "mix.exs"
+      ],
+      "check": {
+        "kind": "regex",
+        "path": "mix.exs",
+        "pattern": "setup:\\s*\\["
+      },
+      "autofix": false,
+      "autofix_strategy": null,
+      "docs_ref": "GENERIC_PACKAGE_QA.md#mixexs-configuration"
+    },
+    {
+      "id": "qa.docs.public_docs",
+      "description": "Package has docs directory or guides",
+      "severity": "low",
+      "applies_to": [
+        "docs/",
+        "guides/"
+      ],
+      "check": {
+        "kind": "regex",
+        "path": "README.md",
+        "pattern": "(?i)docs|guide"
+      },
+      "autofix": true,
+      "autofix_strategy": "doctor_stub",
+      "docs_ref": "GENERIC_PACKAGE_QA.md#documentation-coverage-mix-doctor"
+    }
+  ]
+}

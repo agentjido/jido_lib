@@ -153,6 +153,7 @@ defmodule Jido.Lib.Test.FakeShellAgent do
       {["amp --help"], {:ok, "--execute --stream-json --dangerously-allow-all"}},
       {["codex --help"], {:ok, "codex exec --json --full-auto"}},
       {["codex exec --help"], {:ok, "exec --json"}},
+      {["codex exec"], &codex_exec_response/0},
       {["gemini --help"], {:ok, "--output-format stream-json --approval-mode"}},
       {["codex login --with-api-key"], {:ok, "ok"}},
       {["codex login status"], {:ok, "ok"}},
@@ -224,6 +225,24 @@ defmodule Jido.Lib.Test.FakeShellAgent do
          "is_error" => false,
          "result" => "## Investigation Report\n\nRoot cause found."
        })
+     ]
+     |> Enum.join("\n")}
+  end
+
+  defp codex_exec_response do
+    critique =
+      Jason.encode!(%{
+        verdict: "accept",
+        severity: "low",
+        findings: [],
+        revision_instructions: "",
+        confidence: 0.9
+      })
+
+    {:ok,
+     [
+       Jason.encode!(%{"type" => "turn.started"}),
+       Jason.encode!(%{"type" => "turn.completed", "output_text" => critique})
      ]
      |> Enum.join("\n")}
   end

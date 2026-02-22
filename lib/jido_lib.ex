@@ -2,8 +2,13 @@ defmodule Jido.Lib do
   @moduledoc """
   Standard library modules for the Jido ecosystem.
 
-  The current focus is GitHub issue triage under `Jido.Lib.Github.*`,
-  with the canonical API at `Jido.Lib.Github.Agents.IssueTriageBot`.
+  Canonical GitHub bot APIs under `Jido.Lib.Github.*`:
+
+  - `Jido.Lib.Github.Agents.IssueTriageBot.triage/2`
+  - `Jido.Lib.Github.Agents.PrBot.run_issue/2`
+  - `Jido.Lib.Github.Agents.QualityBot.run_target/2`
+  - `Jido.Lib.Github.Agents.ReleaseBot.run_repo/2`
+  - `Jido.Lib.Github.Agents.RoadmapBot.run_plan/2`
   """
 
   @version "0.1.0"

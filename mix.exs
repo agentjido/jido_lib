@@ -23,6 +23,9 @@ defmodule Jido.Lib.MixProject do
           "README.md",
           "docs/github_issue_triage_workflow.md",
           "docs/github_pr_bot_workflow.md",
+          "docs/github_quality_bot_workflow.md",
+          "docs/github_release_bot_workflow.md",
+          "docs/github_roadmap_bot_workflow.md",
           "docs/telemetry.md"
         ]
       ],
