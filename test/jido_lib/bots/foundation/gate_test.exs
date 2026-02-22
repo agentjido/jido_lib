@@ -26,4 +26,12 @@ defmodule Jido.Lib.Bots.Foundation.GateTest do
     assert decision.terminal == true
     assert decision.should_revise == false
   end
+
+  test "invalid critique input fails closed" do
+    decision = Gate.decide(nil, 1, 1)
+
+    assert decision.decision == :failed
+    assert decision.terminal == true
+    assert decision.should_revise == false
+  end
 end

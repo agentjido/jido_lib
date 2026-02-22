@@ -46,6 +46,15 @@ defmodule Jido.Lib.Bots.Foundation.CritiqueSchema do
     end
   end
 
+  @spec from_output(String.t() | nil) :: {:ok, t()} | {:error, term()}
+  def from_output(payload) when is_binary(payload) do
+    payload
+    |> extract_candidate_maps()
+    |> select_consistent_candidate()
+  end
+
+  def from_output(_payload), do: {:error, :empty_critique_output}
+
   @spec from_text(String.t() | nil) :: t()
   def from_text(payload) when is_binary(payload) do
     case from_json(payload) do
@@ -137,21 +146,11 @@ defmodule Jido.Lib.Bots.Foundation.CritiqueSchema do
   defp clamp_confidence(value), do: value
 
   defp infer_verdict(text) when is_binary(text) do
-    cond do
-      String.contains?(text, "\"verdict\":\"accept\"") ->
-        :accept
+    markers = verdict_markers(text)
 
-      String.contains?(text, "\"verdict\":\"reject\"") ->
-        :reject
-
-      contains_any?(text, ["reject", "block"]) ->
-        :reject
-
-      contains_any?(text, ["approve", "accept"]) ->
-        :accept
-
-      true ->
-        :revise
+    case resolve_marker_verdict(markers) do
+      :unknown -> infer_verdict_from_keywords(text)
+      verdict -> verdict
     end
   end
 
@@ -174,5 +173,181 @@ defmodule Jido.Lib.Bots.Foundation.CritiqueSchema do
 
   defp contains_any?(text, terms) when is_binary(text) and is_list(terms) do
     Enum.any?(terms, &String.contains?(text, &1))
+  end
+
+  defp extract_candidate_maps(payload) when is_binary(payload) do
+    payload
+    |> gather_candidate_payloads()
+    |> Enum.flat_map(&decode_payload_candidates/1)
+    |> Enum.uniq()
+  end
+
+  defp gather_candidate_payloads(payload) when is_binary(payload) do
+    [payload]
+    |> Kernel.++(String.split(payload, "\n", trim: true))
+    |> Kernel.++(extract_code_fence_blocks(payload))
+    |> Kernel.++(extract_json_object_fragments(payload))
+    |> Enum.map(&String.trim/1)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.uniq()
+  end
+
+  defp decode_payload_candidates(payload) when is_binary(payload) do
+    case Jason.decode(payload) do
+      {:ok, decoded} -> collect_critique_maps(decoded)
+      {:error, _} -> []
+    end
+  end
+
+  defp collect_critique_maps(%{} = map) do
+    direct = if has_verdict_key?(map), do: [map], else: []
+    nested = map |> Map.values() |> Enum.flat_map(&collect_critique_maps/1)
+    direct ++ nested
+  end
+
+  defp collect_critique_maps(values) when is_list(values) do
+    Enum.flat_map(values, &collect_critique_maps/1)
+  end
+
+  defp collect_critique_maps(value) when is_binary(value) do
+    value
+    |> gather_candidate_payloads()
+    |> Enum.flat_map(&decode_payload_candidates/1)
+  end
+
+  defp collect_critique_maps(_value), do: []
+
+  defp has_verdict_key?(map) when is_map(map) do
+    Map.has_key?(map, :verdict) or Map.has_key?(map, "verdict")
+  end
+
+  defp select_consistent_candidate([]), do: {:error, :no_critique_payload}
+
+  defp select_consistent_candidate(candidates) when is_list(candidates) do
+    critiques =
+      Enum.reduce(candidates, [], fn candidate, acc ->
+        case new(candidate) do
+          {:ok, critique} -> [critique | acc]
+          {:error, _} -> acc
+        end
+      end)
+      |> Enum.reverse()
+
+    case critiques do
+      [] ->
+        {:error, :invalid_critique_payload}
+
+      values ->
+        verdicts = values |> Enum.map(& &1.verdict) |> Enum.uniq()
+
+        case verdicts do
+          [single] ->
+            {:ok, values |> Enum.reverse() |> Enum.find(&(&1.verdict == single))}
+
+          [] ->
+            {:error, :invalid_critique_payload}
+
+          _ ->
+            {:error, {:ambiguous_critique_verdicts, verdicts}}
+        end
+    end
+  end
+
+  defp extract_code_fence_blocks(text) when is_binary(text) do
+    Regex.scan(~r/```(?:json)?\s*([\s\S]*?)\s*```/i, text, capture: :all_but_first)
+    |> Enum.map(fn [block] -> block end)
+  end
+
+  defp extract_json_object_fragments(text) when is_binary(text) do
+    chars = String.to_charlist(text)
+    state = %{depth: 0, in_string: false, escaped: false, buffer: [], objects: []}
+
+    chars
+    |> Enum.reduce(state, &scan_json_char/2)
+    |> Map.get(:objects)
+    |> Enum.reverse()
+    |> Enum.filter(&String.contains?(&1, "\"verdict\""))
+  end
+
+  defp scan_json_char(char, state) when state.depth == 0 do
+    if char == ?{ do
+      %{state | depth: 1, in_string: false, escaped: false, buffer: [char]}
+    else
+      state
+    end
+  end
+
+  defp scan_json_char(char, state) do
+    buffer = [char | state.buffer]
+    {next_in_string, next_escaped, next_depth} = next_json_scan_state(state, char)
+    finalize_json_scan(state, buffer, next_in_string, next_escaped, next_depth)
+  end
+
+  defp verdict_markers(text) when is_binary(text) do
+    %{
+      accept: contains_any?(text, ["\"verdict\":\"accept\"", "\"verdict\": \"accept\""]),
+      revise: contains_any?(text, ["\"verdict\":\"revise\"", "\"verdict\": \"revise\""]),
+      reject: contains_any?(text, ["\"verdict\":\"reject\"", "\"verdict\": \"reject\""])
+    }
+  end
+
+  defp resolve_marker_verdict(%{accept: true, revise: false, reject: false}), do: :accept
+  defp resolve_marker_verdict(%{accept: false, revise: false, reject: true}), do: :reject
+  defp resolve_marker_verdict(%{accept: false, revise: true, reject: false}), do: :revise
+  defp resolve_marker_verdict(%{accept: false, revise: false, reject: false}), do: :unknown
+  defp resolve_marker_verdict(_), do: :revise
+
+  defp infer_verdict_from_keywords(text) when is_binary(text) do
+    cond do
+      contains_any?(text, ["reject", "block"]) -> :reject
+      contains_any?(text, ["revise", "needs revision", "needs_revision"]) -> :revise
+      true -> :revise
+    end
+  end
+
+  defp next_json_scan_state(%{in_string: true} = state, char) do
+    next_json_scan_state_in_string(state, char)
+  end
+
+  defp next_json_scan_state(%{in_string: false} = state, char) do
+    next_json_scan_state_outside_string(state, char)
+  end
+
+  defp next_json_scan_state_in_string(%{escaped: true, depth: depth}, _char),
+    do: {true, false, depth}
+
+  defp next_json_scan_state_in_string(%{depth: depth}, ?\\), do: {true, true, depth}
+  defp next_json_scan_state_in_string(%{depth: depth}, ?"), do: {false, false, depth}
+  defp next_json_scan_state_in_string(%{depth: depth}, _char), do: {true, false, depth}
+
+  defp next_json_scan_state_outside_string(%{depth: depth}, ?"), do: {true, false, depth}
+  defp next_json_scan_state_outside_string(%{depth: depth}, ?{), do: {false, false, depth + 1}
+
+  defp next_json_scan_state_outside_string(%{depth: depth}, ?}),
+    do: {false, false, max(depth - 1, 0)}
+
+  defp next_json_scan_state_outside_string(%{depth: depth}, _char), do: {false, false, depth}
+
+  defp finalize_json_scan(state, buffer, _next_in_string, _next_escaped, 0) do
+    object = buffer |> Enum.reverse() |> to_string()
+
+    %{
+      state
+      | depth: 0,
+        in_string: false,
+        escaped: false,
+        buffer: [],
+        objects: [object | state.objects]
+    }
+  end
+
+  defp finalize_json_scan(state, buffer, next_in_string, next_escaped, next_depth) do
+    %{
+      state
+      | depth: next_depth,
+        in_string: next_in_string,
+        escaped: next_escaped,
+        buffer: buffer
+    }
   end
 end

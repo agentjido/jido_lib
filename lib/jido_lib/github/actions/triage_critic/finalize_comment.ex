@@ -50,7 +50,7 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.FinalizeComment do
     with {:ok, store} <- Helpers.artifact_store(params),
          {:ok, final_comment_artifact} <-
            ArtifactStore.write_text(store, "final_comment.md", final_comment),
-         {:ok, publish} <- maybe_publish_comment(params, final_comment),
+         {:ok, publish} <- maybe_publish_comment(params, final_comment, decision),
          {:ok, manifest_artifact} <-
            write_manifest(
              store,
@@ -80,14 +80,15 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.FinalizeComment do
        |> Map.put(:comment_url, publish.comment_url)
        |> Map.put(:comment_error, publish.comment_error)
        |> Map.put(:artifacts, artifacts)
-       |> Map.put(:status, :completed)}
+       |> Map.put(:status, status_from_decision(decision))}
     else
       {:error, reason} ->
         {:error, {:finalize_comment_failed, reason}}
     end
   end
 
-  defp maybe_publish_comment(%{post_comment: true} = params, final_comment) do
+  defp maybe_publish_comment(%{post_comment: true} = params, final_comment, decision)
+       when decision in [:accepted, :revised, :rejected] do
     post_params = %{
       comment_mode: :triage_report,
       owner: params.owner,
@@ -119,7 +120,7 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.FinalizeComment do
     end
   end
 
-  defp maybe_publish_comment(_params, _final_comment) do
+  defp maybe_publish_comment(_params, _final_comment, _decision) do
     {:ok, %{comment_posted: false, comment_url: nil, comment_error: nil}}
   end
 
@@ -183,10 +184,10 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.FinalizeComment do
 
   defp infer_decision(params) do
     cond do
-      is_map(params[:gate_v2]) -> params.gate_v2[:decision]
-      is_map(params[:gate_v1]) -> params.gate_v1[:decision]
+      is_map(params[:gate_v2]) and is_atom(params.gate_v2[:decision]) -> params.gate_v2[:decision]
+      is_map(params[:gate_v1]) and is_atom(params.gate_v1[:decision]) -> params.gate_v1[:decision]
       params[:needs_revision] == true -> :rejected
-      true -> :accepted
+      true -> :failed
     end
   end
 
@@ -200,5 +201,6 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.FinalizeComment do
 
   defp status_from_decision(decision) when decision in [:accepted, :revised], do: :completed
   defp status_from_decision(:rejected), do: :failed
+  defp status_from_decision(:failed), do: :error
   defp status_from_decision(_), do: :error
 end

@@ -11,25 +11,29 @@ defmodule Jido.Lib.Bots.Foundation.Gate do
   def decide(critique, iteration, max_revisions)
       when is_integer(iteration) and iteration > 0 and is_integer(max_revisions) and
              max_revisions >= 0 do
-    critique = normalize_critique(critique)
-    route_verdict(critique, iteration, max_revisions)
-  end
+    case normalize_critique(critique) do
+      {:ok, parsed} ->
+        route_verdict(parsed, iteration, max_revisions)
 
-  def decide(_critique, _iteration, _max_revisions) do
-    %{decision: :failed, should_revise: false, terminal: true, reason: :invalid_gate_input}
-  end
-
-  defp normalize_critique(%CritiqueSchema{} = critique), do: critique
-
-  defp normalize_critique(%{} = critique) do
-    case CritiqueSchema.new(critique) do
-      {:ok, parsed} -> parsed
-      {:error, _} -> CritiqueSchema.new!(%{verdict: :revise, findings: [], confidence: 0.0})
+      {:error, reason} ->
+        failed_decision({:invalid_critique, reason})
     end
   end
 
-  defp normalize_critique(_),
-    do: CritiqueSchema.new!(%{verdict: :revise, findings: [], confidence: 0.0})
+  def decide(_critique, _iteration, _max_revisions) do
+    failed_decision(:invalid_gate_input)
+  end
+
+  defp normalize_critique(%CritiqueSchema{} = critique), do: {:ok, critique}
+
+  defp normalize_critique(%{} = critique) do
+    case CritiqueSchema.new(critique) do
+      {:ok, parsed} -> {:ok, parsed}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp normalize_critique(other), do: {:error, {:unsupported_critique_input, other}}
 
   defp route_verdict(%CritiqueSchema{verdict: :accept}, iteration, _max_revisions),
     do: accepted_decision(iteration)
@@ -70,6 +74,10 @@ defmodule Jido.Lib.Bots.Foundation.Gate do
 
   defp terminal_rejection(_iteration, reason) do
     %{decision: :rejected, should_revise: false, terminal: true, reason: reason}
+  end
+
+  defp failed_decision(reason) do
+    %{decision: :failed, should_revise: false, terminal: true, reason: reason}
   end
 
   defp critical_block?(%CritiqueSchema{severity: severity}), do: severity in [:critical, :high]

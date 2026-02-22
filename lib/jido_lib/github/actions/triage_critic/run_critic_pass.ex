@@ -70,8 +70,8 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.RunCriticPass do
              shell_session_server_mod:
                params[:shell_session_server_mod] || Jido.Shell.ShellSessionServer
            ),
+         {:ok, critique} <- CritiqueSchema.from_output(result.summary),
          {:ok, store} <- Helpers.artifact_store(params),
-         critique <- CritiqueSchema.from_text(result.summary),
          {:ok, artifact} <-
            ArtifactStore.write_json(
              store,

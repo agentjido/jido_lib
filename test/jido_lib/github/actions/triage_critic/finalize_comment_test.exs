@@ -41,4 +41,37 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.FinalizeCommentTest do
     assert result.artifacts.final_comment.path =~ "final_comment.md"
     assert result.artifacts.manifest.path =~ "manifest.json"
   end
+
+  test "fails closed when decision cannot be inferred and skips publishing" do
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "triage-critic-final-#{System.unique_integer([:positive])}")
+
+    :ok = File.mkdir_p(tmp_dir)
+
+    params = %{
+      run_id: "run-final-fail-closed",
+      issue_url: "https://github.com/agentjido/jido/issues/42",
+      owner: "agentjido",
+      repo: "jido",
+      issue_number: 42,
+      writer_provider: :claude,
+      critic_provider: :codex,
+      post_comment: true,
+      max_revisions: 1,
+      writer_draft_v1: "Draft v1",
+      started_at: DateTime.utc_now() |> DateTime.to_iso8601(),
+      repo_dir: tmp_dir,
+      workspace_dir: tmp_dir,
+      session_id: "sess-123",
+      sprite_config: %{},
+      sprites_mod: Sprites
+    }
+
+    assert {:ok, result} = Jido.Exec.run(FinalizeComment, params, %{})
+    assert result.decision == :failed
+    assert result.status == :error
+    assert result.comment_posted == false
+    assert result.comment_url == nil
+    assert result.comment_error == nil
+  end
 end

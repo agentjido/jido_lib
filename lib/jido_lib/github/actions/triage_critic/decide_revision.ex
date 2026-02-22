@@ -32,8 +32,16 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.DecideRevision do
 
       true ->
         gate = Gate.decide(critique, iteration, params.max_revisions)
-        persist_gate(params, iteration, gate)
+        handle_gate_result(params, iteration, gate)
     end
+  end
+
+  defp handle_gate_result(_params, _iteration, %{decision: :failed, reason: reason}) do
+    {:error, {:decide_revision_failed, reason}}
+  end
+
+  defp handle_gate_result(params, iteration, gate) do
+    persist_gate(params, iteration, gate)
   end
 
   defp persist_gate(params, 1, gate) do
