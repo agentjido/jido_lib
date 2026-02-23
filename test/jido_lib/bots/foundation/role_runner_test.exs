@@ -3,6 +3,31 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunnerTest do
 
   alias Jido.Lib.Bots.Foundation.RoleRunner
 
+  defmodule CodexItemShellAgent do
+    def run(_session_id, command, _opts \\ []) when is_binary(command) do
+      cond do
+        String.contains?(command, "cat >") ->
+          {:ok, "ok"}
+
+        String.contains?(command, "codex exec") ->
+          {:ok,
+           [
+             Jason.encode!(%{"type" => "thread.started", "thread_id" => "thread-1"}),
+             Jason.encode!(%{"type" => "turn.started"}),
+             Jason.encode!(%{
+               "type" => "item.completed",
+               "item" => %{"type" => "agent_message", "text" => "hello-world"}
+             }),
+             Jason.encode!(%{"type" => "turn.completed", "usage" => %{"output_tokens" => 3}})
+           ]
+           |> Enum.join("\n")}
+
+        true ->
+          {:ok, "ok"}
+      end
+    end
+  end
+
   setup do
     Jido.Lib.Test.FakeShellState.reset!()
     :ok
@@ -24,5 +49,21 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunnerTest do
     assert result.provider == :claude
     assert result.success? == true
     assert is_binary(result.summary)
+  end
+
+  test "extracts codex final text from item.completed agent_message events" do
+    assert {:ok, result} =
+             RoleRunner.run(
+               role: :writer,
+               provider: :codex,
+               session_id: "sess-456",
+               repo_dir: "/work/repo",
+               run_id: "run-456",
+               prompt: "say hello-world",
+               shell_agent_mod: CodexItemShellAgent
+             )
+
+    assert result.success? == true
+    assert result.summary == "hello-world"
   end
 end

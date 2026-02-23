@@ -64,6 +64,10 @@ defmodule Jido.Lib.Github.Plugins.Observability do
         print_bot_family_signal(shell, label, "Roadmap", type, data)
         delta_count
 
+      String.starts_with?(type, "jido.lib.github.docs.") ->
+        print_bot_family_signal(shell, label, "Docs", type, data)
+        delta_count
+
       type == "jido.lib.github.validate_runtime.checked" ->
         shell.info("[#{label}][Runtime] #{runtime_summary(data)}")
         delta_count

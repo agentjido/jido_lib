@@ -1,8 +1,9 @@
 # Jido.Lib
 
-Standard library modules for the Jido ecosystem, including five canonical GitHub bot workflows:
+Standard library modules for the Jido ecosystem, including six canonical GitHub bot workflows:
 
 - Issue Triage Bot
+- Documentation Writer Bot
 - PR Bot
 - Quality Bot
 - Release Bot
@@ -13,6 +14,7 @@ Standard library modules for the Jido ecosystem, including five canonical GitHub
 `jido_lib` owns GitHub-domain workflow orchestration:
 
 - issue triage in Sprite workspaces
+- documentation generation via persistent multi-repo sprite context
 - provider-swappable coding agent execution (`:claude | :amp | :codex | :gemini`)
 - branch/commit/check/push/PR/comment lifecycle for issue-to-PR automation
 - policy-driven repository quality evaluation and safe-fix flows
@@ -47,6 +49,20 @@ Jido.Lib.Github.Agents.IssueTriageBot.triage(
   "https://github.com/owner/repo/issues/42",
   jido: Jido.Default,
   timeout: 600_000
+)
+```
+
+### GitHub Documentation Writer Bot
+
+- `Jido.Lib.Github.Agents.DocumentationWriterBot.run_brief/2`
+
+```elixir
+Jido.Lib.Github.Agents.DocumentationWriterBot.run_brief(
+  File.read!("brief.md"),
+  repos: ["owner/repo:primary", "owner/context_repo:context"],
+  output_repo: "primary",
+  sprite_name: "docs-sprite-1",
+  jido: Jido.Default
 )
 ```
 
@@ -92,6 +108,7 @@ Jido.Lib.Github.Agents.RoadmapBot.run_plan(
 
 ```bash
 mix jido_lib.github.triage https://github.com/owner/repo/issues/42
+mix jido_lib.github.docs path/to/brief.md --repo owner/repo:primary --output-repo primary --sprite-name docs-sprite-1
 mix jido_lib.github.pr https://github.com/owner/repo/issues/42
 mix jido_lib.github.quality owner/repo --yes
 mix jido_lib.github.release owner/repo --yes
@@ -192,6 +209,7 @@ mix jido_lib.github.roadmap owner/repo --yes
 ## Workflow Docs
 
 - `docs/github_issue_triage_workflow.md`
+- `docs/github_documentation_writer_workflow.md`
 - `docs/github_pr_bot_workflow.md`
 - `docs/github_quality_bot_workflow.md`
 - `docs/github_release_bot_workflow.md`

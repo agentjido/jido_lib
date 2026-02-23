@@ -54,6 +54,8 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
                timeout: timeout
              ),
            :ok <- ensure_success_marker(result) do
+        summary = extract_summary(result)
+
         {:ok,
          %{
            role: role,
@@ -62,7 +64,7 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
            command: command,
            success?: result.success?,
            event_count: result.event_count,
-           summary: result.result_text,
+           summary: summary,
            events: result.events,
            output: result.output
          }}
@@ -215,6 +217,136 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
 
   defp ensure_success_marker(%{success?: true}), do: :ok
   defp ensure_success_marker(_), do: {:error, :missing_success_marker}
+
+  defp extract_summary(%{} = result) do
+    events = map_get(result, :events, [])
+    result_text = map_get(result, :result_text)
+    output = map_get(result, :output)
+
+    extract_summary_from_events(events) ||
+      extract_summary_from_json_lines(result_text) ||
+      normalize_text(result_text) ||
+      extract_summary_from_json_lines(output) ||
+      normalize_text(output)
+  end
+
+  defp extract_summary(_), do: nil
+
+  defp extract_summary_from_events(events) when is_list(events) do
+    events
+    |> Enum.reverse()
+    |> Enum.find_value(&extract_summary_from_event/1)
+  end
+
+  defp extract_summary_from_events(_), do: nil
+
+  defp extract_summary_from_event(event) when is_map(event) do
+    type = event_type(event)
+
+    cond do
+      type == "result" ->
+        normalize_text(map_get(event, :result))
+
+      type == "assistant" ->
+        extract_assistant_message(event)
+
+      type in ["item.completed", "item_completed"] ->
+        extract_item_completed_text(event)
+
+      type == "output_text_final" ->
+        normalize_text(map_get(map_get(event, :payload, %{}), :text))
+
+      true ->
+        normalize_text(map_get(event, :output_text))
+    end
+  end
+
+  defp extract_summary_from_event(_), do: nil
+
+  defp extract_assistant_message(event) when is_map(event) do
+    with %{} = message <- map_get(event, :message, %{}),
+         content when is_list(content) <- map_get(message, :content, []),
+         text when is_binary(text) <- content_text(content),
+         text <- normalize_text(text) do
+      text
+    else
+      _ -> nil
+    end
+  end
+
+  defp extract_assistant_message(_), do: nil
+
+  defp content_text(content) when is_list(content) do
+    content
+    |> Enum.flat_map(fn
+      %{} = part ->
+        if map_get(part, :type) == "text" do
+          case normalize_text(map_get(part, :text)) do
+            nil -> []
+            text -> [text]
+          end
+        else
+          []
+        end
+
+      _ ->
+        []
+    end)
+    |> Enum.join("")
+    |> normalize_text()
+  end
+
+  defp content_text(_), do: nil
+
+  defp extract_item_completed_text(event) do
+    item = map_get(event, :item, %{})
+    item_type = map_get(item, :type)
+
+    if item_type in ["agent_message", :agent_message, "assistant_message", :assistant_message] do
+      normalize_text(map_get(item, :text))
+    else
+      nil
+    end
+  end
+
+  defp extract_summary_from_json_lines(text) when is_binary(text) do
+    text
+    |> String.split("\n")
+    |> Enum.reduce([], fn line, acc ->
+      case Jason.decode(line) do
+        {:ok, %{} = event} -> [event | acc]
+        _ -> acc
+      end
+    end)
+    |> case do
+      [] -> nil
+      events -> extract_summary_from_events(Enum.reverse(events))
+    end
+  end
+
+  defp extract_summary_from_json_lines(_), do: nil
+
+  defp normalize_text(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      text -> text
+    end
+  end
+
+  defp normalize_text(_), do: nil
+
+  defp event_type(event) when is_map(event) do
+    map_get(event, :type)
+    |> case do
+      type when is_atom(type) -> Atom.to_string(type)
+      type when is_binary(type) -> type
+      _ -> ""
+    end
+  end
+
+  defp map_get(map, key, default \\ nil) when is_map(map) and is_atom(key) do
+    Map.get(map, key, Map.get(map, Atom.to_string(key), default))
+  end
 
   defp default_prompt_file(role, run_id) when role in [:writer, :critic] do
     suffix = run_id || "run"
