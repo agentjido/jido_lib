@@ -60,6 +60,18 @@ defmodule Mix.Tasks.JidoLib.Github.DocsTest do
     assert Docs.parse_provider(nil, :critic, :claude) == :claude
   end
 
+  test "parse_phase/2 normalizes codex phase values" do
+    assert Docs.parse_phase(nil, :triage) == :triage
+    assert Docs.parse_phase("triage", :coding) == :triage
+    assert Docs.parse_phase("coding", :triage) == :coding
+  end
+
+  test "parse_optional_phase/2 handles none" do
+    assert Docs.parse_optional_phase(nil, :coding) == :coding
+    assert Docs.parse_optional_phase("none", :coding) == nil
+    assert Docs.parse_optional_phase("coding", :triage) == :coding
+  end
+
   defp write_temp_brief!(suffix) do
     path = temp_brief_path(suffix)
     File.write!(path, "# Brief\n\nWrite docs.")

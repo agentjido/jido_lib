@@ -12,6 +12,7 @@ defmodule Jido.Lib.Github.Actions.RunRepoCommands do
       fail_mode: [type: :atom, default: :halt_on_first],
       return_results: [type: :boolean, default: false],
       provider: [type: :atom, default: :claude],
+      single_pass: [type: :boolean, default: false],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
       commands: [type: {:list, :string}, default: []],

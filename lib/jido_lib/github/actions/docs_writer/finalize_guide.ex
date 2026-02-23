@@ -17,6 +17,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.FinalizeGuide do
       writer_provider: [type: :atom, required: true],
       critic_provider: [type: :atom, required: true],
       max_revisions: [type: :integer, default: 1],
+      single_pass: [type: :boolean, default: false],
       writer_draft_v1: [type: {:or, [:string, nil]}, default: nil],
       writer_draft_v2: [type: {:or, [:string, nil]}, default: nil],
       critique_v1: [type: {:or, [:map, nil]}, default: nil],

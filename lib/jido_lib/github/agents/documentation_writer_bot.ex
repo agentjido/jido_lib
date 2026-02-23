@@ -9,10 +9,10 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       {Jido.Runic.Strategy,
        workflow_fn: &__MODULE__.build_workflow/0,
        child_modules: %{
-         writer: Jido.Runic.ChildWorker,
-         critic: Jido.Runic.ChildWorker,
-         writer_v2: Jido.Runic.ChildWorker,
-         critic_v2: Jido.Runic.ChildWorker
+         writer: Jido.Lib.Github.Agents.RunicDelegatedChildWorker,
+         critic: Jido.Lib.Github.Agents.RunicDelegatedChildWorker,
+         writer_v2: Jido.Lib.Github.Agents.RunicDelegatedChildWorker,
+         critic_v2: Jido.Lib.Github.Agents.RunicDelegatedChildWorker
        }},
     schema: []
 
@@ -122,6 +122,7 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
   def build_intake(brief, opts \\ []) when is_binary(brief) and is_list(opts) do
     writer_provider = resolve_writer_provider(opts)
     critic_provider = resolve_critic_provider(opts)
+    single_pass = resolve_single_pass(opts)
     run_id = Intake.normalize_run_id(Keyword.get(opts, :run_id))
     sprite_name = Keyword.get(opts, :sprite_name)
     workspace_root = resolve_workspace_root(opts, sprite_name)
@@ -136,9 +137,13 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       repos: repos,
       output_repo: Keyword.get(opts, :output_repo),
       output_path: Keyword.get(opts, :output_path),
+      local_output_repo_dir: Keyword.get(opts, :local_output_repo_dir),
       publish: publish,
       writer_provider: writer_provider,
       critic_provider: critic_provider,
+      single_pass: single_pass,
+      codex_phase: resolve_codex_phase(opts),
+      codex_fallback_phase: resolve_codex_fallback_phase(opts),
       provider: writer_provider,
       max_revisions: Keyword.get(opts, :max_revisions, 1),
       sprite_name: sprite_name,
@@ -175,6 +180,40 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       :claude
     )
   end
+
+  defp resolve_single_pass(opts) do
+    case Keyword.fetch(opts, :single_pass) do
+      {:ok, value} -> value == true
+      :error -> false
+    end
+  end
+
+  defp resolve_codex_phase(opts) do
+    opts
+    |> Keyword.get(:codex_phase, :triage)
+    |> normalize_phase!()
+  end
+
+  defp resolve_codex_fallback_phase(opts) do
+    case Keyword.get(opts, :codex_fallback_phase, :coding) do
+      nil -> nil
+      :none -> nil
+      "none" -> nil
+      value -> normalize_phase!(value)
+    end
+  end
+
+  defp normalize_phase!(value) when value in [:triage, :coding], do: value
+
+  defp normalize_phase!(value) when is_binary(value) do
+    case String.trim(String.downcase(value)) do
+      "triage" -> :triage
+      "coding" -> :coding
+      other -> raise ArgumentError, "invalid codex phase #{inspect(other)}"
+    end
+  end
+
+  defp normalize_phase!(value), do: raise(ArgumentError, "invalid codex phase #{inspect(value)}")
 
   defp resolve_workspace_root(opts, sprite_name) do
     case Keyword.get(opts, :workspace_root) do
@@ -249,10 +288,23 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
     critic_provider =
       Intake.normalize_provider!(Helpers.map_get(intake, :critic_provider, :claude), :claude)
 
+    codex_phase = normalize_phase!(Helpers.map_get(intake, :codex_phase, :triage))
+
+    codex_fallback_phase =
+      case Helpers.map_get(intake, :codex_fallback_phase, :coding) do
+        nil -> nil
+        :none -> nil
+        "none" -> nil
+        value -> normalize_phase!(value)
+      end
+
     intake
     |> Map.put(:writer_provider, writer_provider)
     |> Map.put(:critic_provider, critic_provider)
+    |> Map.put(:codex_phase, codex_phase)
+    |> Map.put(:codex_fallback_phase, codex_fallback_phase)
     |> Map.put(:provider, writer_provider)
+    |> Map.put_new(:single_pass, false)
     |> Map.put_new(:keep_sprite, true)
     |> Map.put_new(:publish, false)
     |> Map.put_new(:publish_requested, Helpers.map_get(intake, :publish, false))
@@ -267,6 +319,8 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
         Helpers.map_get(final, :writer_provider, Helpers.map_get(intake, :writer_provider)),
       critic_provider:
         Helpers.map_get(final, :critic_provider, Helpers.map_get(intake, :critic_provider)),
+      single_pass:
+        result_value(final, run.productions, :single_pass, Helpers.map_get(intake, :single_pass)),
       decision: result_value(final, run.productions, :decision),
       iterations_used: result_value(final, run.productions, :iterations_used, 1),
       final_guide: result_value(final, run.productions, :final_guide),

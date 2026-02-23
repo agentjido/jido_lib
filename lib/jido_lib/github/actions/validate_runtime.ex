@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.ValidateRuntime do
     compensation: [max_retries: 1],
     schema: [
       provider: [type: :atom, default: :claude],
+      single_pass: [type: :boolean, default: false],
       session_id: [type: :string, required: true],
       repo_dir: [type: {:or, [:string, nil]}, default: nil],
       timeout: [type: :integer, default: 300_000],

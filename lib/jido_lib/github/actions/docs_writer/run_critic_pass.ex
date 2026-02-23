@@ -16,8 +16,11 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPass do
       writer_draft_v1: [type: {:or, [:string, nil]}, default: nil],
       writer_draft_v2: [type: {:or, [:string, nil]}, default: nil],
       critic_provider: [type: :atom, required: true],
+      single_pass: [type: :boolean, default: false],
       role_runtime_ready: [type: {:or, [:map, nil]}, default: nil],
       needs_revision: [type: {:or, [:boolean, nil]}, default: nil],
+      codex_phase: [type: :atom, default: :triage],
+      codex_fallback_phase: [type: {:or, [:atom, nil]}, default: :coding],
       timeout: [type: :integer, default: 300_000],
       shell_agent_mod: [type: :atom, default: Jido.Shell.Agent],
       shell_session_server_mod: [type: :atom, default: Jido.Shell.ShellSessionServer],
@@ -42,6 +45,9 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPass do
       iteration not in [1, 2] ->
         {:error, {:docs_run_critic_pass_failed, :invalid_iteration}}
 
+      params[:single_pass] == true ->
+        {:ok, Helpers.pass_through(params)}
+
       iteration == 2 and params[:needs_revision] != true ->
         {:ok, Helpers.pass_through(params)}
 
@@ -61,8 +67,10 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPass do
              session_id: params.session_id,
              repo_dir: params.repo_dir,
              run_id: params.run_id,
-             prompt_file: "/tmp/jido_docs_critic_#{params.run_id}_v#{iteration}.txt",
+             prompt_file: ".jido/prompts/jido_docs_critic_#{params.run_id}_v#{iteration}.txt",
              prompt: critic_prompt(params, iteration),
+             phase: provider_phase(provider, params),
+             fallback_phase: provider_fallback_phase(provider, params),
              timeout: params[:timeout] || 300_000,
              shell_agent_mod: params[:shell_agent_mod] || Jido.Shell.Agent,
              shell_session_server_mod:
@@ -125,4 +133,10 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPass do
     """
     |> String.trim()
   end
+
+  defp provider_phase(:codex, params), do: params[:codex_phase] || :triage
+  defp provider_phase(_provider, _params), do: :triage
+
+  defp provider_fallback_phase(:codex, params), do: params[:codex_fallback_phase]
+  defp provider_fallback_phase(_provider, _params), do: nil
 end

@@ -23,10 +23,14 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
       session_id = Keyword.fetch!(opts, :session_id)
       repo_dir = Keyword.fetch!(opts, :repo_dir)
       prompt = Keyword.fetch!(opts, :prompt)
+      run_id = Keyword.get(opts, :run_id)
 
       prompt_file =
-        Keyword.get(opts, :prompt_file, default_prompt_file(role, Keyword.get(opts, :run_id)))
+        Keyword.get(opts, :prompt_file, default_prompt_file(role, run_id))
+        |> normalize_prompt_file(provider, repo_dir, role, run_id)
 
+      phase = normalize_phase(Keyword.get(opts, :phase, :triage))
+      fallback_phase = normalize_optional_phase(Keyword.get(opts, :fallback_phase))
       timeout = Keyword.get(opts, :timeout, @default_timeout_ms)
       shell_agent_mod = Keyword.get(opts, :shell_agent_mod, Jido.Shell.Agent)
 
@@ -42,31 +46,35 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
                prompt_file,
                prompt
              ),
-           {:ok, command} <- ProviderRuntime.build_command(provider, :triage, prompt_file),
-           {:ok, result} <-
-             Exec.run_stream(
+           {:ok, exec_result} <-
+             execute_with_optional_fallback(
                provider,
                session_id,
                repo_dir,
-               command: command,
-               shell_agent_mod: shell_agent_mod,
-               shell_session_server_mod: shell_session_server_mod,
-               timeout: timeout
+               prompt_file,
+               shell_agent_mod,
+               shell_session_server_mod,
+               timeout,
+               phase,
+               fallback_phase
              ),
-           :ok <- ensure_success_marker(result) do
-        summary = extract_summary(result)
+           :ok <- ensure_success_marker(exec_result.result) do
+        summary = extract_summary(exec_result.result)
 
         {:ok,
          %{
            role: role,
            provider: provider,
            prompt_file: prompt_file,
-           command: command,
-           success?: result.success?,
-           event_count: result.event_count,
+           command: exec_result.command,
+           phase: exec_result.phase,
+           fallback_phase: exec_result.fallback_phase,
+           fallback_used?: exec_result.fallback_used?,
+           success?: exec_result.result.success?,
+           event_count: exec_result.result.event_count,
            summary: summary,
-           events: result.events,
-           output: result.output
+           events: exec_result.result.events,
+           output: exec_result.result.output
          }}
       else
         {:error, reason} ->
@@ -118,8 +126,17 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
               is_binary(prompt_file) and is_binary(prompt) and is_integer(attempts_left) and
               attempts_left >= 0 do
     escaped = Helpers.escape_path(prompt_file)
+    prompt_dir = Path.dirname(prompt_file)
+
+    mkdir_prefix =
+      if prompt_dir in [".", ""] do
+        ""
+      else
+        "mkdir -p #{Helpers.escape_path(prompt_dir)} && "
+      end
+
     eof_marker = "JIDO_TRIAGE_CRITIC_PROMPT_EOF"
-    command = "cat > #{escaped} << '#{eof_marker}'\n#{prompt}\n#{eof_marker}"
+    command = "#{mkdir_prefix}cat > #{escaped} << '#{eof_marker}'\n#{prompt}\n#{eof_marker}"
 
     case Helpers.run_in_dir(shell_agent_mod, session_id, repo_dir, command, timeout: 10_000) do
       {:ok, _} ->
@@ -350,8 +367,144 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
 
   defp default_prompt_file(role, run_id) when role in [:writer, :critic] do
     suffix = run_id || "run"
-    "/tmp/jido_#{role}_prompt_#{suffix}.txt"
+    ".jido/prompts/jido_#{role}_prompt_#{suffix}.txt"
   end
+
+  defp normalize_prompt_file(prompt_file, provider, repo_dir, role, run_id)
+       when provider == :codex and is_binary(repo_dir) and is_binary(prompt_file) do
+    if codex_prompt_in_repo?(repo_dir, prompt_file) do
+      prompt_file
+    else
+      suffix = run_id || "run"
+      ".jido/prompts/jido_#{role}_prompt_#{suffix}.txt"
+    end
+  end
+
+  defp normalize_prompt_file(prompt_file, _provider, _repo_dir, _role, _run_id), do: prompt_file
+
+  defp codex_prompt_in_repo?(repo_dir, prompt_file) do
+    if Path.type(prompt_file) == :relative do
+      true
+    else
+      expanded_repo = Path.expand(repo_dir)
+      expanded_prompt = Path.expand(prompt_file)
+
+      expanded_prompt == expanded_repo or
+        String.starts_with?(expanded_prompt, expanded_repo <> "/")
+    end
+  end
+
+  defp execute_with_optional_fallback(
+         provider,
+         session_id,
+         repo_dir,
+         prompt_file,
+         shell_agent_mod,
+         shell_session_server_mod,
+         timeout,
+         phase,
+         fallback_phase
+       ) do
+    with {:ok, primary} <-
+           execute_phase(
+             provider,
+             session_id,
+             repo_dir,
+             prompt_file,
+             shell_agent_mod,
+             shell_session_server_mod,
+             timeout,
+             phase
+           ) do
+      summary = extract_summary(primary.result)
+
+      if should_fallback?(provider, phase, fallback_phase, primary.result, summary) do
+        with {:ok, fallback} <-
+               execute_phase(
+                 provider,
+                 session_id,
+                 repo_dir,
+                 prompt_file,
+                 shell_agent_mod,
+                 shell_session_server_mod,
+                 timeout,
+                 fallback_phase
+               ) do
+          {:ok,
+           fallback
+           |> Map.put(:fallback_phase, fallback_phase)
+           |> Map.put(:fallback_used?, true)}
+        end
+      else
+        {:ok,
+         primary
+         |> Map.put(:fallback_phase, fallback_phase)
+         |> Map.put(:fallback_used?, false)}
+      end
+    end
+  end
+
+  defp execute_phase(
+         provider,
+         session_id,
+         repo_dir,
+         prompt_file,
+         shell_agent_mod,
+         shell_session_server_mod,
+         timeout,
+         phase
+       ) do
+    with {:ok, command} <- ProviderRuntime.build_command(provider, phase, prompt_file),
+         {:ok, result} <-
+           Exec.run_stream(
+             provider,
+             session_id,
+             repo_dir,
+             command: command,
+             shell_agent_mod: shell_agent_mod,
+             shell_session_server_mod: shell_session_server_mod,
+             timeout: timeout
+           ) do
+      {:ok, %{command: command, phase: phase, result: result}}
+    end
+  end
+
+  defp should_fallback?(provider, phase, fallback_phase, result, summary) do
+    provider == :codex and phase == :triage and fallback_phase in [:triage, :coding] and
+      fallback_phase != phase and codex_sandbox_blocked?(result, summary)
+  end
+
+  defp codex_sandbox_blocked?(result, summary) when is_map(result) do
+    [summary, map_get(result, :result_text), map_get(result, :output)]
+    |> Enum.any?(&sandbox_block_text?/1)
+  end
+
+  defp codex_sandbox_blocked?(_result, summary), do: sandbox_block_text?(summary)
+
+  defp sandbox_block_text?(value) when is_binary(value) do
+    text = String.downcase(value)
+
+    String.contains?(text, "landlockrestrict") or
+      String.contains?(text, "sandbox error") or
+      String.contains?(text, "sandbox restriction") or
+      String.contains?(text, "blocked from reading the repo")
+  end
+
+  defp sandbox_block_text?(_), do: false
+
+  defp normalize_phase(:triage), do: :triage
+  defp normalize_phase(:coding), do: :coding
+  defp normalize_phase("triage"), do: :triage
+  defp normalize_phase("coding"), do: :coding
+
+  defp normalize_phase(other) do
+    raise ArgumentError, "invalid provider phase #{inspect(other)}"
+  end
+
+  defp normalize_optional_phase(nil), do: nil
+  defp normalize_optional_phase(:none), do: nil
+  defp normalize_optional_phase("none"), do: nil
+  defp normalize_optional_phase(value), do: normalize_phase(value)
 
   defp normalize_role(:writer), do: :writer
   defp normalize_role(:critic), do: :critic

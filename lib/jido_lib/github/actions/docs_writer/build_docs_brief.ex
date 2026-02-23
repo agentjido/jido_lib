@@ -16,6 +16,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
       writer_provider: [type: :atom, required: true],
       critic_provider: [type: :atom, required: true],
       max_revisions: [type: :integer, default: 1],
+      single_pass: [type: :boolean, default: false],
       publish: [type: :boolean, default: false],
       repo_dir: [type: {:or, [:string, nil]}, default: nil],
       workspace_dir: [type: {:or, [:string, nil]}, default: nil],
@@ -57,6 +58,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
     - Writer Provider: #{params.writer_provider}
     - Critic Provider: #{params.critic_provider}
     - Max Revisions: #{params.max_revisions}
+    - Single Pass: #{params.single_pass == true}
 
     ## Repository Context
 

@@ -20,7 +20,11 @@ defmodule Mix.Tasks.JidoLib.Github.Docs do
   - `--critic` - Critic provider: claude | amp | codex | gemini (default: claude)
   - `--max-revisions` - Revision budget (allowed: 0 or 1; default: 1)
   - `--workspace-root` - Override sprite workspace root (default: /work/docs/<sprite_name>)
+  - `--local-output-repo-dir` - Host-local repository root to mirror generated output file
+  - `--codex-phase` - Codex command template for writer/critic: triage | coding (default: triage)
+  - `--codex-fallback-phase` - Fallback when Codex triage is sandbox-blocked: none | triage | coding (default: coding)
   - `--setup-cmd CMD` - Setup command to run in output repo (repeatable)
+  - `--single-pass` - Run writer only once and finalize without critic/revision
   - `--destroy-sprite` - Destroy sprite at end (default keeps sprite)
   """
 
@@ -50,7 +54,11 @@ defmodule Mix.Tasks.JidoLib.Github.Docs do
           critic: :string,
           max_revisions: :integer,
           workspace_root: :string,
+          local_output_repo_dir: :string,
+          codex_phase: :string,
+          codex_fallback_phase: :string,
           setup_cmd: :keep,
+          single_pass: :boolean,
           destroy_sprite: :boolean
         ],
         aliases: [t: :timeout]
@@ -84,7 +92,11 @@ defmodule Mix.Tasks.JidoLib.Github.Docs do
         writer_provider: parse_provider(opts[:writer], :writer, :codex),
         critic_provider: parse_provider(opts[:critic], :critic, :claude),
         max_revisions: normalize_max_revisions(opts[:max_revisions] || 1),
+        single_pass: opts[:single_pass] == true,
+        codex_phase: parse_phase(opts[:codex_phase], :triage),
+        codex_fallback_phase: parse_optional_phase(opts[:codex_fallback_phase], :coding),
         workspace_root: opts[:workspace_root],
+        local_output_repo_dir: opts[:local_output_repo_dir],
         setup_commands: setup_commands_from_opts(opts),
         keep_sprite: opts[:destroy_sprite] != true,
         timeout: timeout,
@@ -115,6 +127,36 @@ defmodule Mix.Tasks.JidoLib.Github.Docs do
   def normalize_max_revisions(value) do
     Mix.raise("Invalid --max-revisions #{inspect(value)}. Allowed in v1: 0 or 1")
   end
+
+  @doc false
+  def parse_phase(nil, default), do: default
+  def parse_phase(:triage, _default), do: :triage
+  def parse_phase(:coding, _default), do: :coding
+
+  def parse_phase(value, _default) when is_binary(value) do
+    case String.trim(String.downcase(value)) do
+      "triage" -> :triage
+      "coding" -> :coding
+      other -> Mix.raise("Invalid codex phase #{inspect(other)}. Allowed: triage, coding")
+    end
+  end
+
+  def parse_phase(value, _default) do
+    Mix.raise("Invalid codex phase #{inspect(value)}. Allowed: triage, coding")
+  end
+
+  @doc false
+  def parse_optional_phase(nil, default), do: default
+  def parse_optional_phase(:none, _default), do: nil
+
+  def parse_optional_phase(value, default) when is_binary(value) do
+    case String.trim(String.downcase(value)) do
+      "none" -> nil
+      other -> parse_phase(other, default)
+    end
+  end
+
+  def parse_optional_phase(value, default), do: parse_phase(value, default)
 
   defp ensure_jido_started! do
     case Jido.start([]) do

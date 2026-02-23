@@ -10,6 +10,7 @@ defmodule Jido.Lib.Github.Actions.TeardownSprite do
     schema: [
       run_id: [type: :string, required: true],
       provider: [type: :atom, default: :claude],
+      single_pass: [type: :boolean, default: false],
       session_id: [type: :string, required: true],
       workspace_dir: [type: :string, required: true],
       keep_sprite: [type: :boolean, default: false],

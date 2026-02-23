@@ -12,6 +12,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.SyncRepos do
       output_repo_context: [type: :map, required: true],
       workspace_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
+      single_pass: [type: :boolean, default: false],
       timeout: [type: :integer, default: 300_000],
       shell_agent_mod: [type: :atom, default: Jido.Shell.Agent]
     ]

@@ -10,6 +10,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PrepareRoleRuntimes do
     schema: [
       writer_provider: [type: :atom, required: true],
       critic_provider: [type: :atom, required: true],
+      single_pass: [type: :boolean, default: false],
       session_id: [type: :string, required: true],
       repo_dir: [type: {:or, [:string, nil]}, default: nil],
       timeout: [type: :integer, default: 300_000],
@@ -23,8 +24,11 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PrepareRoleRuntimes do
   @impl true
   def run(params, _context) do
     providers =
-      [params.writer_provider, params.critic_provider]
-      |> Enum.uniq()
+      providers_to_prepare(
+        params.writer_provider,
+        params.critic_provider,
+        params.single_pass == true
+      )
 
     with :ok <- validate_host_env_for_roles(providers),
          {:ok, runtime} <- bootstrap_runtime(providers, params) do
@@ -65,5 +69,15 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PrepareRoleRuntimes do
         {:error, reason} -> {:halt, {:error, {provider, reason}}}
       end
     end)
+  end
+
+  defp providers_to_prepare(writer_provider, _critic_provider, true) do
+    [writer_provider]
+    |> Enum.uniq()
+  end
+
+  defp providers_to_prepare(writer_provider, critic_provider, false) do
+    [writer_provider, critic_provider]
+    |> Enum.uniq()
   end
 end

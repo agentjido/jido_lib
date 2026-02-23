@@ -15,11 +15,14 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
       docs_brief: [type: {:or, [:string, nil]}, default: nil],
       writer_provider: [type: :atom, required: true],
       critic_provider: [type: :atom, required: true],
+      single_pass: [type: :boolean, default: false],
       critique_v1: [type: {:or, [:map, nil]}, default: nil],
       needs_revision: [type: {:or, [:boolean, nil]}, default: nil],
       role_runtime_ready: [type: {:or, [:map, nil]}, default: nil],
       output_repo_context: [type: {:or, [:map, nil]}, default: nil],
       output_path: [type: {:or, [:string, nil]}, default: nil],
+      codex_phase: [type: :atom, default: :triage],
+      codex_fallback_phase: [type: {:or, [:atom, nil]}, default: :coding],
       timeout: [type: :integer, default: 300_000],
       shell_agent_mod: [type: :atom, default: Jido.Shell.Agent],
       shell_session_server_mod: [type: :atom, default: Jido.Shell.ShellSessionServer],
@@ -34,6 +37,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
   alias Jido.Lib.Bots.Foundation.ArtifactStore
   alias Jido.Lib.Bots.Foundation.RoleRunner
   alias Jido.Lib.Github.Actions.DocsWriter.Helpers
+  alias Jido.Lib.Github.Helpers, as: GithubHelpers
 
   @impl true
   def run(params, _context) do
@@ -62,26 +66,29 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
              session_id: params.session_id,
              repo_dir: params.repo_dir,
              run_id: params.run_id,
-             prompt_file: "/tmp/jido_docs_writer_#{params.run_id}_v#{iteration}.txt",
+             prompt_file: ".jido/prompts/jido_docs_writer_#{params.run_id}_v#{iteration}.txt",
              prompt: writer_prompt(params, iteration),
+             phase: provider_phase(provider, params),
+             fallback_phase: provider_fallback_phase(provider, params),
              timeout: params[:timeout] || 300_000,
              shell_agent_mod: params[:shell_agent_mod] || Jido.Shell.Agent,
              shell_session_server_mod:
                params[:shell_session_server_mod] || Jido.Shell.ShellSessionServer
            ),
+         draft <- materialize_writer_draft(result, provider, params),
          {:ok, store} <- Helpers.artifact_store(params),
          {:ok, artifact} <-
            ArtifactStore.write_text(
              store,
              Helpers.writer_artifact_name(iteration),
-             result.summary || ""
+             draft
            ) do
       key = Helpers.iteration_atom(iteration, :writer)
 
       {:ok,
        params
        |> Helpers.put_artifact(key, artifact)
-       |> Map.put(key, result.summary || "")
+       |> Map.put(key, draft)
        |> Map.put(:iterations_used, iteration)}
     else
       {:error, reason} -> {:error, {:docs_run_writer_pass_failed, reason}}
@@ -144,5 +151,64 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
     Return only the improved markdown guide.
     """
     |> String.trim()
+  end
+
+  defp provider_phase(:codex, params), do: params[:codex_phase] || :triage
+  defp provider_phase(_provider, _params), do: :triage
+
+  defp provider_fallback_phase(:codex, params), do: params[:codex_fallback_phase]
+  defp provider_fallback_phase(_provider, _params), do: nil
+
+  defp materialize_writer_draft(%{} = result, provider, params) do
+    summary = result.summary || ""
+
+    if provider == :codex and codex_status_summary?(summary) do
+      read_generated_output(params, summary)
+    else
+      summary
+    end
+  end
+
+  defp materialize_writer_draft(_result, _provider, _params), do: ""
+
+  defp codex_status_summary?(text) when is_binary(text) do
+    trimmed = String.trim(text)
+
+    trimmed != "" and
+      (String.contains?(trimmed, "Updated the guide at `") or
+         String.starts_with?(trimmed, "Updated `") or
+         String.contains?(trimmed, "No tests were run.") or
+         String.contains?(trimmed, "No tests run.") or
+         String.contains?(trimmed, "If you want, I can"))
+  end
+
+  defp codex_status_summary?(_), do: false
+
+  defp read_generated_output(params, fallback) do
+    output_path = params[:output_path]
+
+    cond do
+      not is_binary(output_path) or String.trim(output_path) == "" ->
+        fallback
+
+      true ->
+        escaped = GithubHelpers.escape_path(output_path)
+        shell_agent_mod = params[:shell_agent_mod] || Jido.Shell.Agent
+        timeout = min(params[:timeout] || 300_000, 10_000)
+
+        case GithubHelpers.run_in_dir(
+               shell_agent_mod,
+               params.session_id,
+               params.repo_dir,
+               "cat #{escaped}",
+               timeout: timeout
+             ) do
+          {:ok, content} when is_binary(content) ->
+            if String.trim(content) == "", do: fallback, else: content
+
+          _ ->
+            fallback
+        end
+    end
   end
 end

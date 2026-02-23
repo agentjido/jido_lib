@@ -14,7 +14,9 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
       repo: [type: :string, required: true],
       writer_provider: [type: {:or, [:atom, nil]}, default: nil],
       critic_provider: [type: {:or, [:atom, nil]}, default: nil],
+      single_pass: [type: :boolean, default: false],
       output_path: [type: {:or, [:string, nil]}, default: nil],
+      local_output_repo_dir: [type: {:or, [:string, nil]}, default: nil],
       final_guide: [type: {:or, [:string, nil]}, default: nil],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
@@ -34,13 +36,19 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
   @impl true
   def run(params, _context) do
     if params.publish != true do
-      result =
-        DocsHelpers.pass_through(params)
-        |> Map.put(:published, false)
-        |> Map.put(:publish_requested, false)
+      with {:ok, local_guide_path} <-
+             maybe_write_local_guide(params, params.output_path, params.final_guide) do
+        result =
+          DocsHelpers.pass_through(params)
+          |> Map.put(:published, false)
+          |> Map.put(:publish_requested, false)
+          |> maybe_put_local_guide_path(local_guide_path)
 
-      emit_docs_signal(result)
-      {:ok, result}
+        emit_docs_signal(result)
+        {:ok, result}
+      else
+        {:error, reason} -> {:error, {:docs_publish_guide_pr_failed, reason}}
+      end
     else
       with {:ok, output_path} <- required_output_path(params.output_path),
            {:ok, final_guide} <- validate_final_guide(params.final_guide),
@@ -51,7 +59,8 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
            :ok <- commit_guide(params, output_path),
            {:ok, commit_sha} <- head_sha(params),
            :ok <- push_branch(params, branch_name),
-           {:ok, pr} <- ensure_pr(params, branch_name, base_branch, output_path) do
+           {:ok, pr} <- ensure_pr(params, branch_name, base_branch, output_path),
+           {:ok, local_guide_path} <- maybe_write_local_guide(params, output_path, final_guide) do
         result =
           DocsHelpers.pass_through(params)
           |> Map.put(:publish_requested, true)
@@ -63,6 +72,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
           |> Map.put(:pr_url, pr[:url])
           |> Map.put(:pr_number, pr[:number])
           |> Map.put(:pr_title, pr[:title])
+          |> maybe_put_local_guide_path(local_guide_path)
 
         emit_docs_signal(result)
         {:ok, result}
@@ -91,6 +101,83 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
   end
 
   defp validate_final_guide(_), do: {:error, :missing_final_guide}
+
+  defp maybe_write_local_guide(params, output_path, final_guide) do
+    with {:ok, local_output_repo_dir} <-
+           normalize_local_output_repo_dir(params[:local_output_repo_dir]),
+         {:ok, output_path} <- maybe_require_output_path(output_path, local_output_repo_dir),
+         {:ok, final_guide} <- maybe_require_final_guide(final_guide, local_output_repo_dir),
+         {:ok, local_guide_path} <- local_guide_path(local_output_repo_dir, output_path),
+         :ok <- maybe_write_local_file(local_guide_path, final_guide, local_output_repo_dir) do
+      {:ok, local_guide_path}
+    end
+  end
+
+  defp normalize_local_output_repo_dir(nil), do: {:ok, nil}
+
+  defp normalize_local_output_repo_dir(value) when is_binary(value) do
+    case String.trim(value) do
+      "" ->
+        {:error, :empty_local_output_repo_dir}
+
+      trimmed ->
+        expanded = Path.expand(trimmed)
+
+        if File.dir?(expanded) do
+          {:ok, expanded}
+        else
+          {:error, {:local_output_repo_dir_missing, expanded}}
+        end
+    end
+  end
+
+  defp normalize_local_output_repo_dir(_), do: {:error, :invalid_local_output_repo_dir}
+
+  defp maybe_require_output_path(_output_path, nil), do: {:ok, nil}
+
+  defp maybe_require_output_path(output_path, _local_output_repo_dir) do
+    required_output_path(output_path)
+  end
+
+  defp maybe_require_final_guide(_final_guide, nil), do: {:ok, nil}
+
+  defp maybe_require_final_guide(final_guide, _local_output_repo_dir) do
+    validate_final_guide(final_guide)
+  end
+
+  defp local_guide_path(nil, _output_path), do: {:ok, nil}
+
+  defp local_guide_path(local_output_repo_dir, output_path)
+       when is_binary(local_output_repo_dir) and is_binary(output_path) do
+    expanded = Path.expand(output_path, local_output_repo_dir)
+
+    if String.starts_with?(expanded, local_output_repo_dir <> "/") do
+      {:ok, expanded}
+    else
+      {:error, :invalid_local_output_path}
+    end
+  end
+
+  defp maybe_write_local_file(nil, _final_guide, _local_output_repo_dir), do: :ok
+
+  defp maybe_write_local_file(local_guide_path, final_guide, local_output_repo_dir)
+       when is_binary(local_guide_path) and is_binary(final_guide) and
+              is_binary(local_output_repo_dir) do
+    with :ok <- File.mkdir_p(Path.dirname(local_guide_path)),
+         :ok <- File.write(local_guide_path, final_guide) do
+      :ok
+    else
+      {:error, reason} ->
+        {:error, {:local_write_failed, local_output_repo_dir, reason}}
+    end
+  end
+
+  defp maybe_put_local_guide_path(result, nil) when is_map(result), do: result
+
+  defp maybe_put_local_guide_path(result, local_guide_path)
+       when is_map(result) and is_binary(local_guide_path) do
+    Map.put(result, :local_guide_path, local_guide_path)
+  end
 
   defp resolve_base_branch(params) do
     cmd =

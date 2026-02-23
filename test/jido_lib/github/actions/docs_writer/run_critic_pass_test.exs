@@ -84,4 +84,33 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPassTest do
 
     assert message == {:docs_run_critic_pass_failed, :no_critique_payload}
   end
+
+  test "single pass skips critic execution" do
+    tmp_dir =
+      Path.join(System.tmp_dir!(), "docs-critic-skip-#{System.unique_integer([:positive])}")
+
+    :ok = File.mkdir_p(tmp_dir)
+
+    params = %{
+      iteration: 1,
+      run_id: "run-docs-critic-skip",
+      session_id: "sess-123",
+      repo_dir: tmp_dir,
+      docs_brief: "Brief",
+      writer_draft_v1: "Draft",
+      critic_provider: :codex,
+      single_pass: true,
+      role_runtime_ready: %{codex: true},
+      timeout: 60_000,
+      shell_agent_mod: NoisyCriticShellAgent,
+      repo: "repo",
+      owner: "test",
+      workspace_dir: tmp_dir,
+      sprite_config: %{},
+      sprites_mod: Sprites
+    }
+
+    assert {:ok, result} = Jido.Exec.run(RunCriticPass, params, %{})
+    refute Map.has_key?(result, :critique_v1)
+  end
 end

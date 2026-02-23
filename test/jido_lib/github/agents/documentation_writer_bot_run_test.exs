@@ -95,6 +95,20 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBotRunTest do
     assert intake.writer_provider == :codex
     assert intake.critic_provider == :claude
     assert intake.max_revisions == 1
+    assert intake.single_pass == false
     assert intake.keep_sprite == true
+  end
+
+  test "build_intake/2 supports single pass mode" do
+    intake =
+      DocumentationWriterBot.build_intake("Write docs",
+        repos: ["test/repo:primary"],
+        output_repo: "primary",
+        sprite_name: "docs-sprite",
+        single_pass: true
+      )
+
+    assert intake.writer_provider == :codex
+    assert intake.single_pass == true
   end
 end

@@ -9,10 +9,10 @@ defmodule Jido.Lib.Github.Agents.IssueTriageCriticBot do
       {Jido.Runic.Strategy,
        workflow_fn: &__MODULE__.build_workflow/0,
        child_modules: %{
-         writer: Jido.Runic.ChildWorker,
-         critic: Jido.Runic.ChildWorker,
-         writer_v2: Jido.Runic.ChildWorker,
-         critic_v2: Jido.Runic.ChildWorker
+         writer: Jido.Lib.Github.Agents.RunicDelegatedChildWorker,
+         critic: Jido.Lib.Github.Agents.RunicDelegatedChildWorker,
+         writer_v2: Jido.Lib.Github.Agents.RunicDelegatedChildWorker,
+         critic_v2: Jido.Lib.Github.Agents.RunicDelegatedChildWorker
        }},
     schema: []
 

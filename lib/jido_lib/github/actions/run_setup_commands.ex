@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.RunSetupCommands do
     compensation: [max_retries: 0],
     schema: [
       provider: [type: :atom, default: :claude],
+      single_pass: [type: :boolean, default: false],
       repo_dir: [type: :string, required: true],
       session_id: [type: :string, required: true],
       commands: [type: {:list, :string}, default: []],

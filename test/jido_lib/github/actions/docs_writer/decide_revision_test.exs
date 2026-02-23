@@ -28,4 +28,18 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.DecideRevisionTest do
     assert result.needs_revision == false
     assert result.final_decision in [:accepted, :revised]
   end
+
+  test "single pass accepts without critique" do
+    params = %{
+      iteration: 1,
+      max_revisions: 1,
+      single_pass: true,
+      run_id: "run-docs-gate-single"
+    }
+
+    assert {:ok, result} = Jido.Exec.run(DecideRevision, params, %{})
+    assert result.needs_revision == false
+    assert result.final_decision == :accepted
+    assert result.gate_v1.reason == :single_pass
+  end
 end

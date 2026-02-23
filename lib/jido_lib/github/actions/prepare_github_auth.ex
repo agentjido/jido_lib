@@ -9,6 +9,7 @@ defmodule Jido.Lib.Github.Actions.PrepareGithubAuth do
     compensation: [max_retries: 1],
     schema: [
       provider: [type: :atom, default: :claude],
+      single_pass: [type: :boolean, default: false],
       session_id: [type: :string, required: true],
       timeout: [type: :integer, default: 300_000],
       shell_agent_mod: [type: :atom, default: Jido.Shell.Agent]

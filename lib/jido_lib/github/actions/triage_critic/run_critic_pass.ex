@@ -63,7 +63,7 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.RunCriticPass do
              session_id: params.session_id,
              repo_dir: params.repo_dir,
              run_id: params.run_id,
-             prompt_file: "/tmp/jido_critic_#{params.run_id}_v#{iteration}.txt",
+             prompt_file: ".jido/prompts/jido_critic_#{params.run_id}_v#{iteration}.txt",
              prompt: critic_prompt(params, iteration),
              timeout: params[:timeout] || 300_000,
              shell_agent_mod: params[:shell_agent_mod] || Jido.Shell.Agent,

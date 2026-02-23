@@ -11,6 +11,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EnsureSpriteSession do
       run_id: [type: :string, required: true],
       sprite_name: [type: :string, required: true],
       workspace_root: [type: :string, required: true],
+      single_pass: [type: :boolean, default: false],
       sprite_config: [type: :map, required: true],
       timeout: [type: :integer, default: 300_000],
       shell_agent_mod: [type: :atom, default: Jido.Shell.Agent],

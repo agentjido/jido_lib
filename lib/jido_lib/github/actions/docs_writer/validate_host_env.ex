@@ -13,10 +13,14 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.ValidateHostEnv do
       repos: [type: {:list, :string}, required: true],
       output_repo: [type: :string, required: true],
       output_path: [type: {:or, [:string, nil]}, default: nil],
+      local_output_repo_dir: [type: {:or, [:string, nil]}, default: nil],
       publish: [type: :boolean, default: false],
       writer_provider: [type: :atom, required: true],
       critic_provider: [type: :atom, required: true],
       max_revisions: [type: :integer, default: 1],
+      single_pass: [type: :boolean, default: false],
+      codex_phase: [type: :atom, default: :triage],
+      codex_fallback_phase: [type: {:or, [:atom, nil]}, default: :coding],
       sprite_name: [type: :string, required: true],
       workspace_root: [type: {:or, [:string, nil]}, default: nil],
       setup_commands: [type: {:list, :string}, default: []],
@@ -36,11 +40,17 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.ValidateHostEnv do
     with :ok <- validate_revision_budget(params.max_revisions),
          :ok <- validate_brief(params.brief),
          :ok <- validate_publish_requirements(params.publish, params.output_path),
+         :ok <- validate_codex_phase_options(params.codex_phase, params.codex_fallback_phase),
          {:ok, repo_specs} <- DocsHelpers.parse_repo_specs(params.repos),
          {:ok, output_repo_context} <-
            DocsHelpers.resolve_output_repo(repo_specs, params.output_repo),
          {:ok, output_path} <- DocsHelpers.sanitize_output_path(params.output_path),
-         :ok <- validate_provider_env(params.writer_provider, params.critic_provider) do
+         :ok <-
+           validate_provider_env(
+             params.writer_provider,
+             params.critic_provider,
+             params.single_pass == true
+           ) do
       workspace_root =
         DocsHelpers.normalize_workspace_root(params.workspace_root, params.sprite_name)
 
@@ -61,8 +71,15 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.ValidateHostEnv do
     end
   end
 
-  defp validate_provider_env(writer_provider, critic_provider) do
-    [writer_provider, critic_provider]
+  defp validate_provider_env(writer_provider, critic_provider, single_pass) do
+    providers =
+      if single_pass do
+        [writer_provider]
+      else
+        [writer_provider, critic_provider]
+      end
+
+    providers
     |> Enum.uniq()
     |> Enum.reduce_while(:ok, fn provider, :ok ->
       case ValidateHostEnv.validate_host_env(provider) do
@@ -87,4 +104,19 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.ValidateHostEnv do
 
   defp validate_publish_requirements(true, nil), do: {:error, :missing_output_path_for_publish}
   defp validate_publish_requirements(_publish, _output_path), do: :ok
+
+  defp validate_codex_phase_options(codex_phase, codex_fallback_phase) do
+    with :ok <- validate_codex_phase(codex_phase, :codex_phase),
+         :ok <- validate_codex_fallback_phase(codex_fallback_phase) do
+      :ok
+    end
+  end
+
+  defp validate_codex_phase(value, _field) when value in [:triage, :coding], do: :ok
+  defp validate_codex_phase(value, field), do: {:error, {:invalid_codex_phase, field, value}}
+
+  defp validate_codex_fallback_phase(nil), do: :ok
+
+  defp validate_codex_fallback_phase(value),
+    do: validate_codex_phase(value, :codex_fallback_phase)
 end
