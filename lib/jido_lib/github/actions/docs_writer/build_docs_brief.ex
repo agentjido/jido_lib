@@ -9,7 +9,8 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
     compensation: [max_retries: 0],
     schema: [
       run_id: [type: :string, required: true],
-      brief: [type: :string, required: true],
+      brief: [type: {:or, [:string, nil]}, default: nil],
+      brief_body: [type: {:or, [:string, nil]}, default: nil],
       repos: [type: {:list, :map}, required: true],
       output_repo_context: [type: :map, required: true],
       output_path: [type: {:or, [:string, nil]}, default: nil],
@@ -23,7 +24,11 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
       sprite_name: [type: {:or, [:string, nil]}, default: nil],
       sprite_config: [type: {:or, [:map, nil]}, default: nil],
       sprites_mod: [type: :atom, default: Sprites],
-      started_at: [type: {:or, [:string, nil]}, default: nil]
+      started_at: [type: {:or, [:string, nil]}, default: nil],
+      # Grounded pipeline keys
+      content_metadata: [type: {:or, [:map, nil]}, default: nil],
+      prompt_overrides: [type: {:or, [:map, nil]}, default: nil],
+      grounded_context: [type: {:or, [:string, nil]}, default: nil]
     ]
 
   alias Jido.Lib.Bots.Foundation.ArtifactStore
@@ -47,8 +52,11 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
 
   defp build_brief(params) do
     output_repo = params.output_repo_context.slug
+    fm = params[:content_metadata] || %{}
+    overrides = params[:prompt_overrides] || %{}
+    brief_body = params[:brief_body] || params[:brief] || ""
 
-    """
+    base_brief = """
     # Documentation Guide Brief
 
     - Run ID: #{params.run_id}
@@ -66,8 +74,13 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
 
     ## Content Brief
 
-    #{String.trim(params.brief)}
+    #{String.trim(brief_body)}
     """
+
+    # Append grounded overrides if content_metadata is present
+    base_brief
+    |> maybe_append_overrides(fm, overrides)
+    |> maybe_append_grounded_context(params[:grounded_context])
     |> String.trim()
   end
 
@@ -76,5 +89,63 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
     |> Enum.map_join("\n", fn spec ->
       "- #{spec.slug} (alias: #{spec.alias})"
     end)
+  end
+
+  defp maybe_append_overrides(brief, fm, overrides)
+       when map_size(fm) == 0 and map_size(overrides) == 0,
+       do: brief
+
+  defp maybe_append_overrides(brief, fm, overrides) do
+    title = Map.get(fm, :title, "Untitled")
+    audience = Map.get(fm, :audience, "beginner")
+    ecosystem = Enum.map_join(Map.get(fm, :ecosystem_packages, []), ", ", &":#{&1}")
+
+    intent = Map.get(overrides, :document_intent, "")
+
+    required_sections =
+      overrides
+      |> Map.get(:required_sections, [])
+      |> Enum.map_join("\n", &"- #{&1}")
+
+    must_include =
+      overrides
+      |> Map.get(:must_include, [])
+      |> Enum.map_join("\n", &"- #{&1}")
+
+    must_avoid =
+      overrides
+      |> Map.get(:must_avoid, [])
+      |> Enum.map_join("\n", &"- #{&1}")
+
+    sections = [
+      if(title != "Untitled", do: "**Title:** #{title}"),
+      if(audience != "beginner", do: "**Audience:** #{audience}"),
+      if(ecosystem != "", do: "**Ecosystem Packages:** [#{ecosystem}]"),
+      if(intent != "", do: "## Document Intent\n#{intent}"),
+      if(required_sections != "", do: "## Required Sections\n#{required_sections}"),
+      if(must_include != "", do: "## Must Include\n#{must_include}"),
+      if(must_avoid != "", do: "## Must Avoid\n#{must_avoid}")
+    ]
+
+    case Enum.reject(sections, &is_nil/1) do
+      [] -> brief
+      parts -> brief <> "\n\n## Content Plan Overrides\n\n" <> Enum.join(parts, "\n\n")
+    end
+  end
+
+  defp maybe_append_grounded_context(brief, nil), do: brief
+  defp maybe_append_grounded_context(brief, ""), do: brief
+
+  defp maybe_append_grounded_context(brief, grounded_context) do
+    brief <>
+      """
+
+      ## Grounded Sources (TRUTH)
+
+      CRITICAL INSTRUCTION: Use the following exact source code to ensure all code examples
+      are 100% accurate. DO NOT guess or hallucinate API signatures. Refer strictly to this context.
+
+      #{grounded_context}
+      """
   end
 end

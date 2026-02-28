@@ -116,7 +116,18 @@ defmodule Jido.Lib.Github.Helpers do
     :warnings,
     :message,
     :status,
-    :error
+    :error,
+    # Grounded documentation pipeline keys (shared with DocsWriter)
+    :content_metadata,
+    :prompt_overrides,
+    :brief_body,
+    :grounded_sources,
+    :grounded_context,
+    :execution_trace_v1,
+    :execution_trace_v2,
+    :execution_feedback,
+    :interactive_demo_block,
+    :embedded_draft
   ]
 
   @spec parse_issue_url!(String.t()) :: {String.t(), String.t(), integer()}

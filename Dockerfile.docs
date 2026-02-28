@@ -1,0 +1,44 @@
+FROM elixir:1.19-slim
+
+RUN apt-get update -qq && \
+    apt-get install -y -qq git build-essential && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    mix local.hex --force && \
+    mix local.rebar --force
+
+# Create non-root user (erlexec refuses to run as root)
+RUN useradd -m -s /bin/bash jido && \
+    mkdir -p /app && chown -R jido:jido /app
+
+WORKDIR /app
+
+# Initialize git repo (required by git_hooks dep)
+RUN git config --global user.email "bot@jido.ai" && \
+    git config --global user.name "Jido Bot" && \
+    git config --global init.defaultBranch main && \
+    git config --global --add safe.directory /app && \
+    git init
+
+# Copy mix files first for better caching
+COPY --chown=jido:jido mix.exs mix.lock ./
+RUN mix deps.get
+
+# Copy the rest of the source
+COPY --chown=jido:jido lib/ lib/
+COPY --chown=jido:jido priv/ priv/
+
+# Compile as root (has access to all deps)
+RUN mix compile
+
+# Fix ownership
+RUN chown -R jido:jido /app
+
+# Switch to non-root user
+USER jido
+
+# Ensure hex/rebar available for non-root user
+RUN mix local.hex --force && mix local.rebar --force
+
+# Default command
+CMD ["mix", "help"]
