@@ -27,10 +27,13 @@ defmodule Jido.Lib.Github.Agents.Observer do
 
   @spec stop(pid()) :: :ok
   def stop(pid) when is_pid(pid) do
-    GenServer.stop(pid, :normal)
+    if Process.alive?(pid) do
+      GenServer.stop(pid, :normal)
+    end
+
     :ok
-  rescue
-    _ -> :ok
+  catch
+    :exit, _ -> :ok
   end
 
   @impl true

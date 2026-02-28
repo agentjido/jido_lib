@@ -15,6 +15,8 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPass do
       docs_brief: [type: {:or, [:string, nil]}, default: nil],
       writer_draft_v1: [type: {:or, [:string, nil]}, default: nil],
       writer_draft_v2: [type: {:or, [:string, nil]}, default: nil],
+      execution_trace_v1: [type: {:or, [:string, nil]}, default: nil],
+      execution_trace_v2: [type: {:or, [:string, nil]}, default: nil],
       critic_provider: [type: :atom, required: true],
       single_pass: [type: :boolean, default: false],
       role_runtime_ready: [type: {:or, [:map, nil]}, default: nil],
@@ -108,9 +110,40 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPass do
   defp critic_prompt(params, iteration) do
     draft = if(iteration == 1, do: params[:writer_draft_v1], else: params[:writer_draft_v2]) || ""
 
-    """
-    You are the critic in a writer/critic documentation workflow.
+    execution_trace =
+      if(iteration == 1, do: params[:execution_trace_v1], else: params[:execution_trace_v2]) ||
+        "No execution trace available."
 
+    has_trace = is_binary(execution_trace) and execution_trace != "No execution trace available."
+
+    compiler_section =
+      if has_trace do
+        """
+
+        CRITICAL:
+        We extracted the Elixir code from the Writer's draft and actually executed it
+        in a real Elixir environment. Here is the deterministic result:
+
+        <compiler_trace>
+        #{execution_trace}
+        </compiler_trace>
+
+        RULES:
+        - If the <compiler_trace> shows a FAILURE or CompileError, you MUST reject the draft
+          with the verdict "revise".
+        - Pass the exact compiler error in the `revision_instructions` so the Writer knows
+          exactly what API it hallucinated and how to fix it based on the Source Context.
+        - If the trace is a SUCCESS, evaluate the narrative for clarity, layout, and adherence
+          to the Must Include/Must Avoid rules.
+        """
+      else
+        ""
+      end
+
+    """
+    You are the technical editor and critic in a writer/critic documentation workflow.
+    You are an expert Elixir engineer.
+    #{compiler_section}
     Evaluate the writer draft for correctness, clarity, completeness, technical accuracy,
     and operational safety for practitioners.
 

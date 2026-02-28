@@ -49,7 +49,18 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.Helpers do
     :pr_url,
     :pr_title,
     :status,
-    :error
+    :error,
+    # Grounded documentation pipeline keys
+    :content_metadata,
+    :prompt_overrides,
+    :brief_body,
+    :grounded_sources,
+    :grounded_context,
+    :execution_trace_v1,
+    :execution_trace_v2,
+    :execution_feedback,
+    :interactive_demo_block,
+    :embedded_draft
   ]
 
   @repo_spec_regex ~r/^([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)(?::([A-Za-z0-9_.-]+))?$/

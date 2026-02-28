@@ -47,14 +47,26 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       ActionNode.new(DocsWriter.DecideRevision, %{iteration: 2}, name: :decide_revision_v2)
 
     Workflow.new(name: :github_documentation_writer_bot)
-    |> Workflow.add(Actions.node(DocsWriter.ValidateHostEnv))
+    # Phase 1: Parse content plan frontmatter
+    |> Workflow.add(Actions.node(DocsWriter.ParseContentBrief))
+    |> Workflow.add(Actions.node(DocsWriter.ResolveOutputPath),
+      to: :parse_content_brief
+    )
+    # Phase 2: Environment setup
+    |> Workflow.add(Actions.node(DocsWriter.ValidateHostEnv),
+      to: :resolve_output_path
+    )
     |> Workflow.add(Actions.node(DocsWriter.EnsureSpriteSession), to: :validate_host_env)
     |> Workflow.add(Actions.node(Actions.PrepareGithubAuth), to: :ensure_sprite_session)
     |> Workflow.add(Actions.node(DocsWriter.SyncRepos), to: :prepare_github_auth)
-    |> Workflow.add(Actions.node(Actions.RunSetupCommands), to: :sync_repos)
+    # Phase 3: Source code grounding
+    |> Workflow.add(Actions.node(DocsWriter.GroundSourceCode), to: :sync_repos)
+    # Phase 4: Runtime preparation
+    |> Workflow.add(Actions.node(Actions.RunSetupCommands), to: :ground_source_code)
     |> Workflow.add(Actions.node(Actions.ValidateRuntime), to: :run_setup_commands)
     |> Workflow.add(Actions.node(DocsWriter.PrepareRoleRuntimes), to: :validate_runtime)
     |> Workflow.add(Actions.node(DocsWriter.BuildDocsBrief), to: :prepare_role_runtimes)
+    # Phase 5: Writer/Critic Pass 1
     |> Workflow.add(
       ActionNode.new(DocsWriter.RunWriterPass, %{iteration: 1},
         name: :run_writer_pass_v1,
@@ -63,13 +75,20 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       to: :build_docs_brief
     )
     |> Workflow.add(
+      ActionNode.new(DocsWriter.EvaluateLivebookDraft, %{iteration: 1},
+        name: :eval_draft_v1
+      ),
+      to: :run_writer_pass_v1
+    )
+    |> Workflow.add(
       ActionNode.new(DocsWriter.RunCriticPass, %{iteration: 1},
         name: :run_critic_pass_v1,
         executor: {:child, :critic}
       ),
-      to: :run_writer_pass_v1
+      to: :eval_draft_v1
     )
     |> Workflow.add(decide_v1, to: :run_critic_pass_v1)
+    # Phase 6: Writer/Critic Pass 2 (revision)
     |> Workflow.add(
       ActionNode.new(DocsWriter.RunWriterPass, %{iteration: 2},
         name: :run_writer_pass_v2,
@@ -78,14 +97,25 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       to: :decide_revision_v1
     )
     |> Workflow.add(
+      ActionNode.new(DocsWriter.EvaluateLivebookDraft, %{iteration: 2},
+        name: :eval_draft_v2
+      ),
+      to: :run_writer_pass_v2
+    )
+    |> Workflow.add(
       ActionNode.new(DocsWriter.RunCriticPass, %{iteration: 2},
         name: :run_critic_pass_v2,
         executor: {:child, :critic_v2}
       ),
-      to: :run_writer_pass_v2
+      to: :eval_draft_v2
     )
     |> Workflow.add(decide_v2, to: :run_critic_pass_v2)
-    |> Workflow.add(Actions.node(DocsWriter.FinalizeGuide), to: :decide_revision_v2)
+    # Phase 7: Interactive demo embedding
+    |> Workflow.add(Actions.node(DocsWriter.EmbedInteractiveDemo), to: :decide_revision_v2)
+    # Phase 8: Finalize and publish
+    |> Workflow.add(Actions.node(DocsWriter.FinalizeGuide),
+      to: :embed_interactive_demo
+    )
     |> Workflow.add(Actions.node(DocsWriter.PublishGuidePr), to: :finalize_guide)
     |> Workflow.add(Actions.node(Actions.TeardownSprite), to: :publish_guide_pr)
   end
@@ -163,7 +193,9 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       shell_session_server_mod:
         Keyword.get(opts, :shell_session_server_mod, Jido.Shell.ShellSessionServer),
       branch_prefix: Keyword.get(opts, :branch_prefix, "jido/docs"),
-      publish_requested: publish
+      publish_requested: publish,
+      content_metadata: Keyword.get(opts, :content_metadata),
+      prompt_overrides: Keyword.get(opts, :prompt_overrides, %{})
     }
   end
 

@@ -107,23 +107,71 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
 
   defp writer_prompt(params, 1) do
     output_repo = get_in(params, [:output_repo_context, :slug]) || "(unspecified)"
+    has_grounded_context = is_binary(params[:grounded_context]) and params.grounded_context != ""
+    content_metadata = params[:content_metadata] || %{}
+    title = Map.get(content_metadata, :title, "Documentation Guide")
 
-    """
-    You are the writer for a documentation generation workflow.
+    base_prompt = """
+    You are an expert Elixir technical writer and educator.
 
     Use the following brief and repository context to produce a complete documentation guide.
 
     #{params[:docs_brief] || ""}
 
     Requirements:
-    - Produce polished markdown suitable for direct inclusion in the repository.
+    - Produce a valid .livemd file in NimblePublisher format.
+    - The file MUST start with an Elixir map frontmatter header followed by a --- separator.
+    - After the frontmatter, use standard markdown with ```elixir code fences.
+    - The first ```elixir code block after the frontmatter MUST be a `Mix.install/2` setup cell.
     - Include an overview, prerequisites, step-by-step guidance, and verification steps.
-    - Keep claims grounded to repository context provided by the brief.
+    - Write a clear, engaging narrative that connects the code blocks.
     - Do not include TODO placeholders.
+    - CRITICAL: NimbleOptions schemas only accept `type:`, `default:`, and `required:` keys.
+      Do NOT use `doc:` in any schema definition — it causes a compilation error.
+    """
+
+    grounded_clause =
+      if has_grounded_context do
+        """
+        - Ensure all API calls perfectly match the provided Grounding Context source code.
+          DO NOT hallucinate functions or arities.
+        - If building a Runic Workflow, assign the final compiled `%Workflow{}` to `demo_workflow`.
+        - If building a Jido Agent, name the final module `DemoAgent`.
+        - When calling Agent.set/2, always use `Jido.Agent.set/2`, never `YourModule.set/2`.
+        """
+      else
+        ""
+      end
+
+    """
+    #{String.trim(base_prompt)}
+    #{grounded_clause}
+    MANDATORY OUTPUT FORMAT — your response MUST begin exactly like this structure:
+
+    %{
+      title: "#{title}",
+      description: "A concise description of this guide.",
+      category: :docs,
+      order: 10,
+      tags: [:docs, :learn]
+    }
+    ---
+    ### Overview
+
+    Narrative introduction here.
+
+    ```elixir
+    Mix.install([{:jido, "~> 2.0"}])
+    ```
+
+    ### Next Section
+
+    More content with ```elixir code fences...
 
     Output constraints:
-    - Return markdown only.
-    - No surrounding JSON.
+    - Return RAW markdown only. Start directly with the %{ frontmatter.
+    - DO NOT wrap your response in markdown code fences (no ```markdown or ```livemd wrappers).
+    - No conversational surrounding text. Just the file contents.
 
     Output target context:
     - Repo: #{output_repo}
@@ -136,19 +184,37 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
     instructions =
       get_in(params, [:critique_v1, :revision_instructions]) || "Address prior critique findings."
 
-    """
-    You are revising a documentation guide based on critic feedback.
+    content_metadata = params[:content_metadata] || %{}
+    title = Map.get(content_metadata, :title, "Documentation Guide")
 
-    Original brief:
+    """
+    You are revising a .livemd documentation guide based on compiler and critic feedback.
+
+    Original brief and grounding context:
     #{params[:docs_brief] || ""}
 
     Previous draft:
     #{params[:writer_draft_v1] || ""}
 
-    Critic revision instructions:
+    Critic & Compiler revision instructions:
     #{instructions}
 
-    Return only the improved markdown guide.
+    IMPORTANT RULES:
+    - The file MUST start with %{ frontmatter } followed by --- separator. Example:
+      %{
+        title: "#{title}",
+        description: "...",
+        category: :docs,
+        order: 10,
+        tags: [:docs, :learn]
+      }
+      ---
+    - Use standard markdown with ```elixir code fences. NOT Livebook IDE format.
+    - NimbleOptions schemas: ONLY use `type:`, `default:`, `required:`. NEVER use `doc:`.
+    - Use `Jido.Agent.set/2` not `YourModule.set/2` to avoid circular dependencies.
+
+    Return the complete, corrected .livemd file contents.
+    DO NOT wrap it in ```markdown fences. Start directly with the %{ frontmatter.
     """
     |> String.trim()
   end
