@@ -94,10 +94,14 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EvaluateLivebookDraft do
                timeout: @eval_timeout_ms
              ) do
           {:ok, stdout} ->
-            if has_error_indicators?(stdout) do
-              "BEAM Execution FAILED:\n\nCompiler/Runtime Error Trace:\n#{stdout}"
+            # Strip Mix.install dependency compilation noise so error detection
+            # only runs against the user's code output (after "Generated <app> app").
+            user_output = strip_mix_install_noise(stdout)
+
+            if has_error_indicators?(user_output) do
+              "BEAM Execution FAILED:\n\nCompiler/Runtime Error Trace:\n#{user_output}"
             else
-              "BEAM Execution SUCCESS:\n#{stdout}"
+              "BEAM Execution SUCCESS:\n#{user_output}"
             end
 
           {:error, reason} ->
@@ -124,6 +128,36 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EvaluateLivebookDraft do
     |> Enum.join("\n\n# --- NEXT BLOCK ---\n\n")
   end
 
+  # Strip Mix.install dependency resolution and compilation output.
+  # Everything from "Resolving Hex dependencies" through the last
+  # "Generated <app> app" line is dep noise.  We keep only what comes
+  # after so error detection targets the user's code output.
+  defp strip_mix_install_noise(output) do
+    # Find the last "Generated <app> app" line (end of dep compilation)
+    case :binary.match(output, "Generated ") do
+      :nomatch ->
+        output
+
+      _ ->
+        lines = String.split(output, "\n")
+
+        # Find the last line matching "Generated <app> app"
+        last_gen_idx =
+          lines
+          |> Enum.with_index()
+          |> Enum.filter(fn {line, _} -> String.starts_with?(String.trim(line), "Generated ") end)
+          |> List.last()
+
+        case last_gen_idx do
+          {_, idx} ->
+            lines |> Enum.drop(idx + 1) |> Enum.join("\n") |> String.trim()
+
+          nil ->
+            output
+        end
+    end
+  end
+
   defp has_error_indicators?(output) do
     # Match Elixir error patterns specifically.  The previous bare "failed" match
     # produced false positives on normal Jido runtime log lines like
@@ -137,12 +171,25 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EvaluateLivebookDraft do
   end
 
   # Keep only the tail of the trace when it exceeds the byte limit.
-  # Mix.install dependency resolution output (packages, compilation logs)
-  # dominates the beginning; the actual error is always at the end.
+  # The BEAM SUCCESS/FAILED prefix is always preserved so the critic
+  # knows the verdict even after truncation.
   defp truncate_trace(trace) when byte_size(trace) <= @max_trace_bytes, do: trace
 
   defp truncate_trace(trace) do
-    tail = binary_part(trace, byte_size(trace) - @max_trace_bytes, @max_trace_bytes)
-    "[… truncated #{byte_size(trace) - @max_trace_bytes} bytes of Mix.install output …]\n" <> tail
+    # Preserve the first line (BEAM Execution SUCCESS/FAILED) through truncation
+    {prefix, rest} =
+      case String.split(trace, "\n", parts: 2) do
+        [first, remainder] -> {first <> "\n", remainder}
+        [only] -> {"", only}
+      end
+
+    budget = @max_trace_bytes - byte_size(prefix)
+
+    if budget > 0 and byte_size(rest) > budget do
+      tail = binary_part(rest, byte_size(rest) - budget, budget)
+      prefix <> "[… truncated #{byte_size(rest) - budget} bytes …]\n" <> tail
+    else
+      trace
+    end
   end
 end
