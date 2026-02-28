@@ -110,43 +110,42 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
     has_grounded_context = is_binary(params[:grounded_context]) and params.grounded_context != ""
     content_metadata = params[:content_metadata] || %{}
     title = Map.get(content_metadata, :title, "Documentation Guide")
-
-    base_prompt = """
-    You are an expert Elixir technical writer and educator.
-
-    Use the following brief and repository context to produce a complete documentation guide.
-
-    #{params[:docs_brief] || ""}
-
-    Requirements:
-    - Produce a valid .livemd file in NimblePublisher format.
-    - The file MUST start with an Elixir map frontmatter header followed by a --- separator.
-    - After the frontmatter, use standard markdown with ```elixir code fences.
-    - The first ```elixir code block after the frontmatter MUST be a `Mix.install/2` setup cell.
-    - Include an overview, prerequisites, step-by-step guidance, and verification steps.
-    - Write a clear, engaging narrative that connects the code blocks.
-    - Do not include TODO placeholders.
-    - CRITICAL: NimbleOptions schemas only accept `type:`, `default:`, and `required:` keys.
-      Do NOT use `doc:` in any schema definition — it causes a compilation error.
-    """
+    ecosystem = Map.get(content_metadata, :ecosystem_packages, ["jido"]) |> Enum.map_join(", ", &"{:#{&1}, \"~> 2.0\"}")
 
     grounded_clause =
       if has_grounded_context do
         """
         - Ensure all API calls perfectly match the provided Grounding Context source code.
           DO NOT hallucinate functions or arities.
-        - If building a Runic Workflow, assign the final compiled `%Workflow{}` to `demo_workflow`.
-        - If building a Jido Agent, name the final module `DemoAgent`.
-        - When calling Agent.set/2, always use `Jido.Agent.set/2`, never `YourModule.set/2`.
+        - When calling Agent functions, always use the fully qualified `Jido.Agent.cmd/2`,
+          `Jido.Agent.set/2`, `Jido.Agent.new/1` — never `YourModule.cmd/2`.
         """
       else
         ""
       end
 
     """
-    #{String.trim(base_prompt)}
+    You are an expert Elixir technical writer and educator.
+
+    Use the following exhaustive brief and source code context to produce a complete Livebook.
+
+    #{params[:docs_brief] || ""}
+
+    Requirements:
+    - Produce a valid Livebook (.livemd) document.
+    - Ensure all API calls perfectly match the provided Grounding Context source code.
+      DO NOT hallucinate functions or arities.
+    - Write a clear, engaging narrative that connects the code blocks.
+    - CRITICAL: NimbleOptions schemas only accept `type:`, `default:`, and `required:` keys.
+      Do NOT use `doc:` in any schema definition — it causes a compilation error.
     #{grounded_clause}
-    MANDATORY OUTPUT FORMAT — your response MUST begin exactly like this structure:
+
+    ═══════════════════════════════════════════════════════
+    ║  THE GOLDEN TEMPLATE — Follow this EXACTLY         ║
+    ═══════════════════════════════════════════════════════
+
+    Your ENTIRE response must follow this structure. Do NOT wrap it in ```markdown
+    or ```livemd fences. Start IMMEDIATELY with the %{ frontmatter map.
 
     %{
       title: "#{title}",
@@ -156,22 +155,82 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
       tags: [:docs, :learn]
     }
     ---
-    ### Overview
+    # #{title}
 
-    Narrative introduction here.
+    Narrative introduction explaining what we'll build and why.
+
+    ## Prerequisites
+
+    Brief prerequisites (link to prior guides if available).
+
+    ## Setup
 
     ```elixir
-    Mix.install([{:jido, "~> 2.0"}])
+    Mix.install([#{ecosystem}])
     ```
 
-    ### Next Section
+    ## Defining the Module
 
-    More content with ```elixir code fences...
+    Explain the module definition grounded in the source context.
 
-    Output constraints:
-    - Return RAW markdown only. Start directly with the %{ frontmatter.
-    - DO NOT wrap your response in markdown code fences (no ```markdown or ```livemd wrappers).
-    - No conversational surrounding text. Just the file contents.
+    ```elixir
+    defmodule MyApp.Example do
+      use Jido.Agent,
+        name: "example",
+        schema: [
+          count: [type: :integer, default: 0]
+        ]
+    end
+    ```
+
+    ## Running Commands
+
+    Demonstrate the API with concrete examples. Define variables BEFORE using them.
+
+    ```elixir
+    # Always define the agent first, then use it
+    {:ok, agent} = Jido.Agent.new(MyApp.Example)
+    {:ok, updated, _directives} = Jido.Agent.cmd(agent, [SomeAction])
+    IO.inspect(updated.state, label: "State after command")
+    ```
+
+    ## Testing
+
+    ```elixir
+    ExUnit.start(autorun: false)
+
+    defmodule MyApp.ExampleTest do
+      use ExUnit.Case
+
+      test "state transitions" do
+        {:ok, agent} = Jido.Agent.new(MyApp.Example)
+        assert agent.state.count == 0
+      end
+    end
+
+    ExUnit.run()
+    ```
+
+    ## What to Try Next
+
+    Pointers to related guides.
+
+    ```elixir
+    # CRITICAL: Assign the final module to DemoAgent for the visualizer
+    DemoAgent = MyApp.Example
+    ```
+
+    ═══════════════════════════════════════════════════════
+    ║  END OF GOLDEN TEMPLATE                            ║
+    ═══════════════════════════════════════════════════════
+
+    ABSOLUTE RULES:
+    1. Your response starts with `%{` — no preamble, no fences, no "Here is…"
+    2. Every ```elixir block must be valid, self-contained Elixir that compiles
+    3. Define ALL variables before using them (no undefined variable errors)
+    4. The LAST ```elixir block must contain `DemoAgent = YourAgentModule`
+    5. Use `Jido.Agent.cmd/2` not `YourModule.cmd/2` to avoid circular deps
+    6. NimbleOptions: ONLY `type:`, `default:`, `required:` — NEVER `doc:`
 
     Output target context:
     - Repo: #{output_repo}
@@ -199,22 +258,23 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
     Critic & Compiler revision instructions:
     #{instructions}
 
-    IMPORTANT RULES:
-    - The file MUST start with %{ frontmatter } followed by --- separator. Example:
-      %{
-        title: "#{title}",
-        description: "...",
-        category: :docs,
-        order: 10,
-        tags: [:docs, :learn]
-      }
-      ---
-    - Use standard markdown with ```elixir code fences. NOT Livebook IDE format.
-    - NimbleOptions schemas: ONLY use `type:`, `default:`, `required:`. NEVER use `doc:`.
-    - Use `Jido.Agent.set/2` not `YourModule.set/2` to avoid circular dependencies.
-
-    Return the complete, corrected .livemd file contents.
-    DO NOT wrap it in ```markdown fences. Start directly with the %{ frontmatter.
+    ABSOLUTE RULES — Violating any of these causes an automatic rejection:
+    1. Return the COMPLETE corrected .livemd file. Not a diff. Not a snippet. THE WHOLE FILE.
+    2. Start IMMEDIATELY with `%{` frontmatter. No fences. No preamble. Example:
+       %{
+         title: "#{title}",
+         description: "...",
+         category: :docs,
+         order: 10,
+         tags: [:docs, :learn]
+       }
+       ---
+    3. Use standard markdown with ```elixir code fences. NOT Livebook IDE format.
+    4. NimbleOptions schemas: ONLY `type:`, `default:`, `required:`. NEVER `doc:`.
+    5. Use `Jido.Agent.cmd/2` and `Jido.Agent.set/2` — NEVER `YourModule.cmd/2`.
+    6. Define ALL variables before referencing them (no undefined variable errors).
+    7. The LAST ```elixir block MUST contain `DemoAgent = YourAgentModule`.
+    8. Every ```elixir block must compile and run independently when concatenated.
     """
     |> String.trim()
   end
