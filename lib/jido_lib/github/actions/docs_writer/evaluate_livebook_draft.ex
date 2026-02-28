@@ -125,7 +125,25 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EvaluateLivebookDraft do
     ~r/```elixir\n([\s\S]*?)\n```/s
     |> Regex.scan(markdown)
     |> Enum.map(fn [_, code] -> String.trim(code) end)
+    |> Enum.map(&strip_alias_assignment/1)
+    |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n\n# --- NEXT BLOCK ---\n\n")
+  end
+
+  # Strip `DemoAgent = SomeModule` lines from evaluation code.
+  # In Elixir, uppercase identifiers are aliases (atoms), not variables.
+  # `DemoAgent = CounterAgent` is a pattern match between two different atoms
+  # and always fails with MatchError.  This line only matters for the Livebook
+  # visualizer, not for compilation verification.
+  defp strip_alias_assignment(code) do
+    code
+    |> String.split("\n")
+    |> Enum.reject(fn line ->
+      trimmed = String.trim(line)
+      Regex.match?(~r/^[A-Z]\w*\s*=\s*[A-Z]/, trimmed) and not String.contains?(trimmed, "defmodule")
+    end)
+    |> Enum.join("\n")
+    |> String.trim()
   end
 
   # Strip Mix.install dependency resolution and compilation output.
