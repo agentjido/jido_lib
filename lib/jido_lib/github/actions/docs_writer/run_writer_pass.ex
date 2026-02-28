@@ -110,7 +110,21 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
     has_grounded_context = is_binary(params[:grounded_context]) and params.grounded_context != ""
     content_metadata = params[:content_metadata] || %{}
     title = Map.get(content_metadata, :title, "Documentation Guide")
-    ecosystem = Map.get(content_metadata, :ecosystem_packages, ["jido"]) |> Enum.map_join(", ", &"{:#{&1}, \"~> 2.0\"}")
+    # Known version constraints for ecosystem packages.  Kino is 0.x, not 2.x.
+    version_map = %{
+      "jido" => "~> 2.0",
+      "jido_action" => "~> 2.0",
+      "jido_signal" => "~> 2.0",
+      "kino" => "~> 0.14"
+    }
+
+    ecosystem =
+      content_metadata
+      |> Map.get(:ecosystem_packages, ["jido"])
+      |> Enum.map_join(", ", fn pkg ->
+        vsn = Map.get(version_map, pkg, "~> 1.0")
+        "{:#{pkg}, \"#{vsn}\"}"
+      end)
 
     grounded_clause =
       if has_grounded_context do
