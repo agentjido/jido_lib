@@ -55,9 +55,37 @@ defmodule Mix.Tasks.JidoLib.Github.Docs.ScanDrift do
     end
   end
 
-  defp has_drift?(_repos, _source_files, _last_sha) do
-    # TODO: Wire up to shell agent git calls to check if commits exist
-    # on source_files since last_sha. Currently hardcoded false.
-    false
+  defp has_drift?(repos, source_files, last_sha) do
+    Enum.any?(repos, fn repo_spec ->
+      {owner, repo} = parse_repo_spec(repo_spec)
+
+      Enum.any?(source_files, fn file ->
+        case System.cmd("gh", ["api", "repos/#{owner}/#{repo}/compare/#{last_sha}...HEAD",
+               "--jq", ".files[].filename"], stderr_to_stdout: true) do
+          {output, 0} ->
+            changed_files = String.split(String.trim(output), "\n", trim: true)
+            file in changed_files
+
+          _ ->
+            # API call failed (bad SHA, rate limit, etc.) — flag as potentially drifted
+            Mix.shell().info("    (could not verify #{owner}/#{repo} @ #{last_sha})")
+            true
+        end
+      end)
+    end)
+  end
+
+  defp parse_repo_spec(spec) when is_binary(spec) do
+    # Handles "owner/repo:alias" and "owner/repo" formats
+    slug =
+      case String.split(spec, ":", parts: 2) do
+        [slug, _alias] -> slug
+        [slug] -> slug
+      end
+
+    case String.split(slug, "/", parts: 2) do
+      [owner, repo] -> {owner, repo}
+      _ -> {"unknown", spec}
+    end
   end
 end
