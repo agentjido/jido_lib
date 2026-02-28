@@ -90,12 +90,25 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EmbedInteractiveDemo do
         embedded_draft = String.trim(draft || "") <> "\n\n" <> demo_section
         {:ok, Helpers.pass_through(params) |> Map.put(:embedded_draft, embedded_draft)}
 
-      {:error, _reason} ->
+      {:error, reason} ->
+        require Logger
+        Logger.warning("EmbedInteractiveDemo: demo generation failed: #{inspect(reason)}")
         {:ok, Helpers.pass_through(params) |> Map.put(:embedded_draft, draft)}
     end
   end
 
-  defp demo_prompt(docs_brief, draft) do
+  # Keep the demo prompt small to avoid 414 URI Too Long from the Sprites API.
+  # The demo only needs the draft content (what was taught), not the full
+  # docs_brief with its 20KB+ grounded source context.
+  defp demo_prompt(_docs_brief, draft) do
+    # Truncate draft to last ~4KB if very large
+    trimmed_draft =
+      if is_binary(draft) and byte_size(draft) > 4_096 do
+        binary_part(draft, byte_size(draft) - 4_096, 4_096)
+      else
+        draft || ""
+      end
+
     """
     You are an expert Elixir engineer and technical educator.
 
@@ -103,20 +116,20 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EmbedInteractiveDemo do
     demonstrates the core concepts taught in the following guide. This code will be
     appended at the bottom of the Livebook in a "Try It Live" section using Kino.
 
-    Context Brief (Grounding Truth):
-    #{docs_brief || ""}
-
     Guide Content (What was actually taught):
-    #{draft || ""}
+    #{trimmed_draft}
 
     REQUIREMENTS:
     - Output ONLY valid, executable Elixir code.
     - DO NOT wrap the code in markdown ```elixir fences. Just the raw code.
-    - If building a Runic workflow, assign it to `demo_workflow`.
     - If building a Jido Agent, define it as `DemoAgent`.
+    - If building a Runic workflow, assign it to `demo_workflow`.
     - Include any minimal dummy modules or functions needed for the code to compile and run.
     - DO NOT include `Mix.install/2` (it is already at the top of the Livebook).
     - DO NOT include the `Kino` visualizer calls, I will append that automatically.
+    - Access current agent state via `context.state` in action run/2 callbacks.
+    - `cmd/2` returns `{agent, directives}` 2-tuple.
+    - Call `YourModule.new()` and `YourModule.cmd(agent, actions)` — NOT `Jido.Agent.new/cmd`.
     """
     |> String.trim()
   end
