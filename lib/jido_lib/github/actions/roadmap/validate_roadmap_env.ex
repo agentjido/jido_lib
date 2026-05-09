@@ -21,7 +21,7 @@ defmodule Jido.Lib.Github.Actions.Roadmap.ValidateRoadmapEnv do
   alias Jido.Lib.Github.Actions.Roadmap.Helpers
   alias Jido.Lib.Github.Helpers, as: GithubHelpers
 
-  @required_tools ["git", "gh", "rg", "mix"]
+  @required_tools ["git", "gh", "mix"]
 
   @impl true
   def run(params, _context) do

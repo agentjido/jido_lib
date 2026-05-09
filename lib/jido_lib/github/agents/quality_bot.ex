@@ -13,8 +13,8 @@ defmodule Jido.Lib.Github.Agents.QualityBot do
   alias Jido.Lib.Bots.Foundation.Intake
   alias Jido.Lib.Bots.{Result, Runtime}
   alias Jido.Lib.Github.Actions
-  alias Jido.Lib.Github.AgentRuntime
   alias Jido.Lib.Github.Actions.Quality
+  alias Jido.Lib.Github.AgentRuntime
   alias Jido.Lib.Github.Helpers
   alias Jido.Lib.Github.Plugins.{Observability, RuntimeContext}
   alias Runic.Workflow

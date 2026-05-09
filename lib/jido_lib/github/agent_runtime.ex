@@ -74,17 +74,15 @@ defmodule Jido.Lib.Github.AgentRuntime do
   end
 
   defp run_pipeline_process(agent_module, intake, observer_pid, timeout, pid, sprite_prefix) do
-    try do
-      payload = maybe_put_observer(intake, observer_pid)
-      Jido.AgentServer.cast(pid, agent_module.intake_signal(payload))
+    payload = maybe_put_observer(intake, observer_pid)
+    Jido.AgentServer.cast(pid, agent_module.intake_signal(payload))
 
-      completion = Jido.AgentServer.await_completion(pid, timeout: timeout)
-      run = snapshot(pid)
+    completion = Jido.AgentServer.await_completion(pid, timeout: timeout)
+    run = snapshot(pid)
 
-      completion_result(completion, run, intake, pid, sprite_prefix)
-    after
-      if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5_000)
-    end
+    completion_result(completion, run, intake, pid, sprite_prefix)
+  after
+    if Process.alive?(pid), do: GenServer.stop(pid, :normal, 5_000)
   end
 
   defp completion_result({:ok, %{status: :completed}}, run, intake, pid, sprite_prefix) do

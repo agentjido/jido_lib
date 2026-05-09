@@ -17,9 +17,9 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.PrepareRoleRuntimes do
     ]
 
   alias Jido.Harness.Exec
+  alias Jido.Lib.Github.Actions.TriageCritic.Helpers, as: CriticHelpers
   alias Jido.Lib.Github.Actions.ValidateHostEnv
   alias Jido.Lib.Github.Helpers
-  alias Jido.Lib.Github.Actions.TriageCritic.Helpers, as: CriticHelpers
 
   @impl true
   def run(params, _context) do
