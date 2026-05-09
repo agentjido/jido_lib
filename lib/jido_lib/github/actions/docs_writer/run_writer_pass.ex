@@ -344,8 +344,6 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
     end
   end
 
-  defp materialize_writer_draft(_result, _provider, _params), do: ""
-
   defp codex_status_summary?(text) when is_binary(text) do
     trimmed = String.trim(text)
 
@@ -362,28 +360,33 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunWriterPass do
   defp read_generated_output(params, fallback) do
     output_path = params[:output_path]
 
-    cond do
-      not is_binary(output_path) or String.trim(output_path) == "" ->
+    if valid_output_path?(output_path) do
+      read_output_file(params, output_path, fallback)
+    else
+      fallback
+    end
+  end
+
+  defp valid_output_path?(output_path),
+    do: is_binary(output_path) and String.trim(output_path) != ""
+
+  defp read_output_file(params, output_path, fallback) do
+    escaped = GithubHelpers.escape_path(output_path)
+    shell_agent_mod = params[:shell_agent_mod] || Jido.Shell.Agent
+    timeout = min(params[:timeout] || 300_000, 10_000)
+
+    case GithubHelpers.run_in_dir(
+           shell_agent_mod,
+           params.session_id,
+           params.repo_dir,
+           "cat #{escaped}",
+           timeout: timeout
+         ) do
+      {:ok, content} when is_binary(content) ->
+        if String.trim(content) == "", do: fallback, else: content
+
+      _ ->
         fallback
-
-      true ->
-        escaped = GithubHelpers.escape_path(output_path)
-        shell_agent_mod = params[:shell_agent_mod] || Jido.Shell.Agent
-        timeout = min(params[:timeout] || 300_000, 10_000)
-
-        case GithubHelpers.run_in_dir(
-               shell_agent_mod,
-               params.session_id,
-               params.repo_dir,
-               "cat #{escaped}",
-               timeout: timeout
-             ) do
-          {:ok, content} when is_binary(content) ->
-            if String.trim(content) == "", do: fallback, else: content
-
-          _ ->
-            fallback
-        end
     end
   end
 end

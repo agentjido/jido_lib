@@ -80,44 +80,51 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EvaluateLivebookDraft do
 
     write_cmd = "cat > #{escaped_path} << 'EOF_EVAL'\n#{code}\nEOF_EVAL"
 
-    with {:ok, _} <-
-           GithubHelpers.run_in_dir(agent_mod, params.session_id, params.repo_dir, write_cmd,
-             timeout: 5_000
-           ) do
-      # Append `|| true` so the shell always exits 0, guaranteeing the
-      # stdout/stderr output is captured even when elixir exits non-zero.
-      # Error detection is handled by `has_error_indicators?/1` text analysis.
-      exec_cmd = "elixir #{escaped_path} 2>&1 || true"
+    case GithubHelpers.run_in_dir(agent_mod, params.session_id, params.repo_dir, write_cmd,
+           timeout: 5_000
+         ) do
+      {:ok, _} ->
+        trace = run_evaluation_script(agent_mod, params, escaped_path)
 
-      trace =
-        case GithubHelpers.run_in_dir(agent_mod, params.session_id, params.repo_dir, exec_cmd,
-               timeout: @eval_timeout_ms
-             ) do
-          {:ok, stdout} ->
-            # Strip Mix.install dependency compilation noise so error detection
-            # only runs against the user's code output (after "Generated <app> app").
-            user_output = strip_mix_install_noise(stdout)
+        {:ok,
+         params
+         |> Helpers.pass_through()
+         |> Map.put(key, truncate_trace(trace))}
 
-            if has_error_indicators?(user_output) do
-              "BEAM Execution FAILED:\n\nCompiler/Runtime Error Trace:\n#{user_output}"
-            else
-              "BEAM Execution SUCCESS:\n#{user_output}"
-            end
-
-          {:error, reason} ->
-            "SYSTEM ERROR: Could not run verification: #{inspect(reason)}"
-        end
-
-      {:ok,
-       params
-       |> Helpers.pass_through()
-       |> Map.put(key, truncate_trace(trace))}
-    else
       _ ->
         {:ok,
          params
          |> Helpers.pass_through()
          |> Map.put(key, "Failed to write evaluation script to Sprite.")}
+    end
+  end
+
+  defp run_evaluation_script(agent_mod, params, escaped_path) do
+    # Append `|| true` so the shell always exits 0, guaranteeing the
+    # stdout/stderr output is captured even when elixir exits non-zero.
+    # Error detection is handled by `has_error_indicators?/1` text analysis.
+    exec_cmd = "elixir #{escaped_path} 2>&1 || true"
+
+    case GithubHelpers.run_in_dir(agent_mod, params.session_id, params.repo_dir, exec_cmd,
+           timeout: @eval_timeout_ms
+         ) do
+      {:ok, stdout} ->
+        format_execution_trace(stdout)
+
+      {:error, reason} ->
+        "SYSTEM ERROR: Could not run verification: #{inspect(reason)}"
+    end
+  end
+
+  defp format_execution_trace(stdout) do
+    # Strip Mix.install dependency compilation noise so error detection only
+    # runs against the user's code output (after "Generated <app> app").
+    user_output = strip_mix_install_noise(stdout)
+
+    if has_error_indicators?(user_output) do
+      "BEAM Execution FAILED:\n\nCompiler/Runtime Error Trace:\n#{user_output}"
+    else
+      "BEAM Execution SUCCESS:\n#{user_output}"
     end
   end
 
@@ -140,7 +147,9 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.EvaluateLivebookDraft do
     |> String.split("\n")
     |> Enum.reject(fn line ->
       trimmed = String.trim(line)
-      Regex.match?(~r/^[A-Z]\w*\s*=\s*[A-Z]/, trimmed) and not String.contains?(trimmed, "defmodule")
+
+      Regex.match?(~r/^[A-Z]\w*\s*=\s*[A-Z]/, trimmed) and
+        not String.contains?(trimmed, "defmodule")
     end)
     |> Enum.join("\n")
     |> String.trim()

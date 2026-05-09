@@ -48,7 +48,7 @@ defmodule Mix.Tasks.JidoLib.Github.Quality do
     )
 
     result =
-      QualityBot.run_target(target,
+      quality_bot_module().run_target(target,
         provider: provider,
         timeout: timeout,
         apply: apply?,
@@ -114,6 +114,10 @@ defmodule Mix.Tasks.JidoLib.Github.Quality do
 
   defp maybe_print_error(nil), do: :ok
   defp maybe_print_error(error), do: Mix.shell().error("quality bot failed: #{inspect(error)}")
+
+  defp quality_bot_module do
+    Application.get_env(:jido_lib, :quality_bot_module, QualityBot)
+  end
 
   defp default_true(opts, key) when is_list(opts) and is_atom(key) do
     if Keyword.has_key?(opts, key), do: opts[key], else: true

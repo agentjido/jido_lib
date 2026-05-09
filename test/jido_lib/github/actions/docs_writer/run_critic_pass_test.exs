@@ -82,7 +82,7 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.RunCriticPassTest do
     assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
              Jido.Exec.run(RunCriticPass, params, %{})
 
-    assert message == {:docs_run_critic_pass_failed, :no_critique_payload}
+    assert message == "{:docs_run_critic_pass_failed, :no_critique_payload}"
   end
 
   test "single pass skips critic execution" do

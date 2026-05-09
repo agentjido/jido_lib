@@ -94,7 +94,7 @@ defmodule Jido.Lib.Github.Actions.EnsureCommitTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:ensure_commit_failed, :no_changes}
+              message: "{:ensure_commit_failed, :no_changes}"
             }} = Jido.Exec.run(EnsureCommit, params, %{})
   end
 end

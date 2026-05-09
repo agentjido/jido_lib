@@ -64,6 +64,6 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.ValidateHostEnvTest do
     assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
              Jido.Exec.run(ValidateHostEnv, params, %{})
 
-    assert message == {:docs_validate_host_env_failed, :missing_output_path_for_publish}
+    assert message == "{:docs_validate_host_env_failed, :missing_output_path_for_publish}"
   end
 end

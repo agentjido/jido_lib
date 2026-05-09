@@ -8,7 +8,7 @@ defmodule Jido.Lib.Github.Actions.Roadmap.AdditionalActionsTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:roadmap_validate_env_failed, _reason}
+              message: "{:roadmap_validate_env_failed, :empty_target}"
             }} =
              Jido.Exec.run(Roadmap.ValidateRoadmapEnv, params, %{})
   end
@@ -89,7 +89,7 @@ defmodule Jido.Lib.Github.Actions.Roadmap.AdditionalActionsTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:roadmap_push_or_open_pr_failed, :open_pr_requires_push}
+              message: "{:roadmap_push_or_open_pr_failed, :open_pr_requires_push}"
             }} =
              Jido.Exec.run(Roadmap.PushOrOpenPr, params, %{})
   end

@@ -55,49 +55,61 @@ defmodule Mix.Tasks.JidoLib.Github.Docs.Pipeline do
     plan = ContentPlan.parse_file!(file)
 
     if Map.get(plan.metadata, :status) in [:published, :draft] do
-      fm_repos =
-        Map.get(plan.metadata, :repos, [])
-        |> Enum.map(fn r ->
-          if String.contains?(r, "/"), do: r, else: "agentjido/#{r}:#{r}"
-        end)
-
-      repos = Enum.uniq(fm_repos ++ ["#{output_repo}:output"])
-
-      output_repo_slug =
-        output_repo
-        |> String.split(":")
-        |> List.last()
-
-      sprite_name =
-        "docs-#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
-
-      max_revisions = opts[:max_revisions] || 1
-
-      result =
-        DocumentationWriterBot.run_brief(plan.body,
-          content_metadata: plan.metadata,
-          prompt_overrides: Map.get(plan.metadata, :prompt_overrides, %{}),
-          repos: repos,
-          output_repo: output_repo_slug,
-          sprite_name: sprite_name,
-          publish: publish,
-          max_revisions: max_revisions,
-          writer_provider: provider,
-          critic_provider: provider,
-          jido: Jido.Default,
-          debug: false,
-          observer: Mix.shell()
-        )
-
-      Mix.shell().info("Completed: #{file} -> Status: #{result[:status]}")
-
-      if result[:pr_url] do
-        Mix.shell().info("PR: #{result[:pr_url]}")
-      end
+      run_plan(file, plan, output_repo, provider, publish, opts)
     else
-      Mix.shell().info("Skipping: unrecognized status #{inspect(Map.get(plan.metadata, :status))}")
+      Mix.shell().info(
+        "Skipping: unrecognized status #{inspect(Map.get(plan.metadata, :status))}"
+      )
     end
   end
+
+  defp run_plan(file, plan, output_repo, provider, publish, opts) do
+    result =
+      DocumentationWriterBot.run_brief(plan.body,
+        content_metadata: plan.metadata,
+        prompt_overrides: Map.get(plan.metadata, :prompt_overrides, %{}),
+        repos: plan_repos(plan, output_repo),
+        output_repo: output_repo_slug(output_repo),
+        sprite_name: random_sprite_name(),
+        publish: publish,
+        max_revisions: opts[:max_revisions] || 1,
+        writer_provider: provider,
+        critic_provider: provider,
+        jido: Jido.Default,
+        debug: false,
+        observer: Mix.shell()
+      )
+
+    Mix.shell().info("Completed: #{file} -> Status: #{result[:status]}")
+    maybe_log_pr_url(result)
+  end
+
+  defp plan_repos(plan, output_repo) do
+    fm_repos =
+      plan.metadata
+      |> Map.get(:repos, [])
+      |> Enum.map(fn repo ->
+        if String.contains?(repo, "/"), do: repo, else: "agentjido/#{repo}:#{repo}"
+      end)
+
+    Enum.uniq(fm_repos ++ ["#{output_repo}:output"])
+  end
+
+  defp output_repo_slug(output_repo) do
+    output_repo
+    |> String.split(":")
+    |> List.last()
+  end
+
+  defp random_sprite_name do
+    "docs-#{:crypto.strong_rand_bytes(4) |> Base.encode16(case: :lower)}"
+  end
+
+  defp maybe_log_pr_url(%{pr_url: pr_url}) when not is_nil(pr_url) do
+    Mix.shell().info("PR: #{pr_url}")
+  end
+
+  defp maybe_log_pr_url(_result), do: :ok
 
   defp ensure_jido_started! do
     case Jido.start([]) do

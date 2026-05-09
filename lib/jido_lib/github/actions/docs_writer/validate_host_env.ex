@@ -106,9 +106,9 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.ValidateHostEnv do
   defp validate_publish_requirements(_publish, _output_path), do: :ok
 
   defp validate_codex_phase_options(codex_phase, codex_fallback_phase) do
-    with :ok <- validate_codex_phase(codex_phase, :codex_phase),
-         :ok <- validate_codex_fallback_phase(codex_fallback_phase) do
-      :ok
+    case validate_codex_phase(codex_phase, :codex_phase) do
+      :ok -> validate_codex_fallback_phase(codex_fallback_phase)
+      {:error, reason} -> {:error, reason}
     end
   end
 

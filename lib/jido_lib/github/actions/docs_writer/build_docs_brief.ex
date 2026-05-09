@@ -96,40 +96,68 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.BuildDocsBrief do
        do: brief
 
   defp maybe_append_overrides(brief, fm, overrides) do
-    title = Map.get(fm, :title, "Untitled")
-    audience = Map.get(fm, :audience, "beginner")
-    ecosystem = Enum.map_join(Map.get(fm, :ecosystem_packages, []), ", ", &":#{&1}")
-
-    intent = Map.get(overrides, :document_intent, "")
-
-    required_sections =
-      overrides
-      |> Map.get(:required_sections, [])
-      |> Enum.map_join("\n", &"- #{&1}")
-
-    must_include =
-      overrides
-      |> Map.get(:must_include, [])
-      |> Enum.map_join("\n", &"- #{&1}")
-
-    must_avoid =
-      overrides
-      |> Map.get(:must_avoid, [])
-      |> Enum.map_join("\n", &"- #{&1}")
-
-    sections = [
-      if(title != "Untitled", do: "**Title:** #{title}"),
-      if(audience != "beginner", do: "**Audience:** #{audience}"),
-      if(ecosystem != "", do: "**Ecosystem Packages:** [#{ecosystem}]"),
-      if(intent != "", do: "## Document Intent\n#{intent}"),
-      if(required_sections != "", do: "## Required Sections\n#{required_sections}"),
-      if(must_include != "", do: "## Must Include\n#{must_include}"),
-      if(must_avoid != "", do: "## Must Avoid\n#{must_avoid}")
-    ]
-
-    case Enum.reject(sections, &is_nil/1) do
+    case override_sections(fm, overrides) do
       [] -> brief
       parts -> brief <> "\n\n## Content Plan Overrides\n\n" <> Enum.join(parts, "\n\n")
+    end
+  end
+
+  defp override_sections(fm, overrides) do
+    [
+      metadata_override(:title, fm, "Untitled", "**Title:**"),
+      metadata_override(:audience, fm, "beginner", "**Audience:**"),
+      ecosystem_override(fm),
+      text_override(:document_intent, overrides, "## Document Intent"),
+      list_override(:required_sections, overrides, "## Required Sections"),
+      list_override(:must_include, overrides, "## Must Include"),
+      list_override(:must_avoid, overrides, "## Must Avoid")
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp metadata_override(key, metadata, default, label) do
+    value = Map.get(metadata, key, default)
+
+    if value == default do
+      nil
+    else
+      "#{label} #{value}"
+    end
+  end
+
+  defp ecosystem_override(metadata) do
+    ecosystem =
+      metadata
+      |> Map.get(:ecosystem_packages, [])
+      |> Enum.map_join(", ", &":#{&1}")
+
+    if ecosystem == "" do
+      nil
+    else
+      "**Ecosystem Packages:** [#{ecosystem}]"
+    end
+  end
+
+  defp text_override(key, overrides, heading) do
+    value = Map.get(overrides, key, "")
+
+    if value == "" do
+      nil
+    else
+      "#{heading}\n#{value}"
+    end
+  end
+
+  defp list_override(key, overrides, heading) do
+    value =
+      overrides
+      |> Map.get(key, [])
+      |> Enum.map_join("\n", &"- #{&1}")
+
+    if value == "" do
+      nil
+    else
+      "#{heading}\n#{value}"
     end
   end
 

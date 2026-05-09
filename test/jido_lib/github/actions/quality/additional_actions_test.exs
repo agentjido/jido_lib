@@ -15,7 +15,7 @@ defmodule Jido.Lib.Github.Actions.Quality.AdditionalActionsTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:quality_validate_host_env_failed, {:invalid_provider, :bogus}}
+              message: "{:quality_validate_host_env_failed, {:invalid_provider, :bogus}}"
             }} =
              Jido.Exec.run(Quality.ValidateHostEnv, params, %{})
   end

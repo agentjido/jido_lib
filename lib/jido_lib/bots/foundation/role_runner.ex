@@ -48,13 +48,15 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
              ),
            {:ok, exec_result} <-
              execute_with_optional_fallback(
-               provider,
-               session_id,
-               repo_dir,
-               prompt_file,
-               shell_agent_mod,
-               shell_session_server_mod,
-               timeout,
+               %{
+                 provider: provider,
+                 session_id: session_id,
+                 repo_dir: repo_dir,
+                 prompt_file: prompt_file,
+                 shell_agent_mod: shell_agent_mod,
+                 shell_session_server_mod: shell_session_server_mod,
+                 timeout: timeout
+               },
                phase,
                fallback_phase
              ),
@@ -121,22 +123,8 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
          prompt_file,
          prompt,
          attempts_left
-       )
-       when is_atom(shell_agent_mod) and is_binary(session_id) and is_binary(repo_dir) and
-              is_binary(prompt_file) and is_binary(prompt) and is_integer(attempts_left) and
-              attempts_left >= 0 do
-    escaped = Helpers.escape_path(prompt_file)
-    prompt_dir = Path.dirname(prompt_file)
-
-    mkdir_prefix =
-      if prompt_dir in [".", ""] do
-        ""
-      else
-        "mkdir -p #{Helpers.escape_path(prompt_dir)} && "
-      end
-
-    eof_marker = "JIDO_TRIAGE_CRITIC_PROMPT_EOF"
-    command = "#{mkdir_prefix}cat > #{escaped} << '#{eof_marker}'\n#{prompt}\n#{eof_marker}"
+       ) do
+    command = prompt_write_command(prompt_file, prompt)
 
     case Helpers.run_in_dir(shell_agent_mod, session_id, repo_dir, command, timeout: 10_000) do
       {:ok, _} ->
@@ -154,6 +142,17 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
         )
     end
   end
+
+  defp prompt_write_command(prompt_file, prompt) do
+    escaped = Helpers.escape_path(prompt_file)
+    eof_marker = "JIDO_TRIAGE_CRITIC_PROMPT_EOF"
+    mkdir_prefix = prompt_dir_prefix(Path.dirname(prompt_file))
+
+    "#{mkdir_prefix}cat > #{escaped} << '#{eof_marker}'\n#{prompt}\n#{eof_marker}"
+  end
+
+  defp prompt_dir_prefix(prompt_dir) when prompt_dir in [".", ""], do: ""
+  defp prompt_dir_prefix(prompt_dir), do: "mkdir -p #{Helpers.escape_path(prompt_dir)} && "
 
   defp retry_or_fail_prompt_write(
          reason,
@@ -247,8 +246,6 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
       normalize_text(output)
   end
 
-  defp extract_summary(_), do: nil
-
   defp extract_summary_from_events(events) when is_list(events) do
     events
     |> Enum.reverse()
@@ -291,29 +288,30 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
     end
   end
 
-  defp extract_assistant_message(_), do: nil
-
   defp content_text(content) when is_list(content) do
     content
-    |> Enum.flat_map(fn
-      %{} = part ->
-        if map_get(part, :type) == "text" do
-          case normalize_text(map_get(part, :text)) do
-            nil -> []
-            text -> [text]
-          end
-        else
-          []
-        end
-
-      _ ->
-        []
-    end)
+    |> Enum.flat_map(&content_part_text/1)
     |> Enum.join("")
     |> normalize_text()
   end
 
   defp content_text(_), do: nil
+
+  defp content_part_text(%{} = part) do
+    case map_get(part, :type) do
+      "text" -> normalized_part_text(part)
+      _ -> []
+    end
+  end
+
+  defp content_part_text(_part), do: []
+
+  defp normalized_part_text(part) do
+    case normalize_text(map_get(part, :text)) do
+      nil -> []
+      text -> [text]
+    end
+  end
 
   defp extract_item_completed_text(event) do
     item = map_get(event, :item, %{})
@@ -394,76 +392,46 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
     end
   end
 
-  defp execute_with_optional_fallback(
-         provider,
-         session_id,
-         repo_dir,
-         prompt_file,
-         shell_agent_mod,
-         shell_session_server_mod,
-         timeout,
-         phase,
-         fallback_phase
-       ) do
-    with {:ok, primary} <-
-           execute_phase(
-             provider,
-             session_id,
-             repo_dir,
-             prompt_file,
-             shell_agent_mod,
-             shell_session_server_mod,
-             timeout,
-             phase
-           ) do
-      summary = extract_summary(primary.result)
-
-      if should_fallback?(provider, phase, fallback_phase, primary.result, summary) do
-        with {:ok, fallback} <-
-               execute_phase(
-                 provider,
-                 session_id,
-                 repo_dir,
-                 prompt_file,
-                 shell_agent_mod,
-                 shell_session_server_mod,
-                 timeout,
-                 fallback_phase
-               ) do
-          {:ok,
-           fallback
-           |> Map.put(:fallback_phase, fallback_phase)
-           |> Map.put(:fallback_used?, true)}
-        end
-      else
-        {:ok,
-         primary
-         |> Map.put(:fallback_phase, fallback_phase)
-         |> Map.put(:fallback_used?, false)}
-      end
+  defp execute_with_optional_fallback(context, phase, fallback_phase) do
+    with {:ok, primary} <- execute_phase(context, phase) do
+      maybe_execute_fallback(primary, context, phase, fallback_phase)
     end
   end
 
-  defp execute_phase(
-         provider,
-         session_id,
-         repo_dir,
-         prompt_file,
-         shell_agent_mod,
-         shell_session_server_mod,
-         timeout,
-         phase
-       ) do
-    with {:ok, command} <- ProviderRuntime.build_command(provider, phase, prompt_file),
+  defp maybe_execute_fallback(primary, context, phase, fallback_phase) do
+    summary = extract_summary(primary.result)
+
+    if should_fallback?(context.provider, phase, fallback_phase, primary.result, summary) do
+      execute_fallback(context, fallback_phase)
+    else
+      {:ok, fallback_metadata(primary, fallback_phase, false)}
+    end
+  end
+
+  defp execute_fallback(context, fallback_phase) do
+    with {:ok, fallback} <- execute_phase(context, fallback_phase) do
+      {:ok, fallback_metadata(fallback, fallback_phase, true)}
+    end
+  end
+
+  defp fallback_metadata(result, fallback_phase, fallback_used?) do
+    result
+    |> Map.put(:fallback_phase, fallback_phase)
+    |> Map.put(:fallback_used?, fallback_used?)
+  end
+
+  defp execute_phase(context, phase) do
+    with {:ok, command} <-
+           ProviderRuntime.build_command(context.provider, phase, context.prompt_file),
          {:ok, result} <-
            Exec.run_stream(
-             provider,
-             session_id,
-             repo_dir,
+             context.provider,
+             context.session_id,
+             context.repo_dir,
              command: command,
-             shell_agent_mod: shell_agent_mod,
-             shell_session_server_mod: shell_session_server_mod,
-             timeout: timeout
+             shell_agent_mod: context.shell_agent_mod,
+             shell_session_server_mod: context.shell_session_server_mod,
+             timeout: context.timeout
            ) do
       {:ok, %{command: command, phase: phase, result: result}}
     end
@@ -478,8 +446,6 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
     [summary, map_get(result, :result_text), map_get(result, :output)]
     |> Enum.any?(&sandbox_block_text?/1)
   end
-
-  defp codex_sandbox_blocked?(_result, summary), do: sandbox_block_text?(summary)
 
   defp sandbox_block_text?(value) when is_binary(value) do
     text = String.downcase(value)

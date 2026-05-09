@@ -89,6 +89,6 @@ defmodule Jido.Lib.Github.Actions.TriageCritic.RunCriticPassTest do
     assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
              Jido.Exec.run(RunCriticPass, params, %{})
 
-    assert message == {:run_critic_pass_failed, :no_critique_payload}
+    assert message == "{:run_critic_pass_failed, :no_critique_payload}"
   end
 end

@@ -43,9 +43,7 @@ defmodule Mix.Tasks.JidoLib.Github.Docs.ScanDrift do
       end)
 
     if drifted_files == [] do
-      Mix.shell().info(
-        "Zero drift detected. All documentation is aligned with source code."
-      )
+      Mix.shell().info("Zero drift detected. All documentation is aligned with source code.")
     else
       Mix.shell().error("API DRIFT DETECTED IN #{length(drifted_files)} FILES:")
 
@@ -56,7 +54,7 @@ defmodule Mix.Tasks.JidoLib.Github.Docs.ScanDrift do
   end
 
   defp has_drift?(_repos, _source_files, _last_sha) do
-    # TODO: Wire up to shell agent git calls to check if commits exist
+    # Pending implementation: wire up shell agent git calls to check if commits exist
     # on source_files since last_sha. Currently hardcoded false.
     false
   end

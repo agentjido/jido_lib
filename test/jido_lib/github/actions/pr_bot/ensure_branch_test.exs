@@ -57,7 +57,7 @@ defmodule Jido.Lib.Github.Actions.EnsureBranchTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:ensure_branch_failed, :api_down}
+              message: "{:ensure_branch_failed, :api_down}"
             }} = Jido.Exec.run(EnsureBranch, params, %{})
   end
 end

@@ -49,10 +49,10 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgentCodingTest do
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
-    assert {:error,
-            %Jido.Action.Error.ExecutionFailureError{
-              message: {:run_coding_agent_failed, _reason}
-            }} = Jido.Exec.run(RunCodingAgent, params, %{})
+    assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+             Jido.Exec.run(RunCodingAgent, params, %{})
+
+    assert message =~ "{:run_coding_agent_failed,"
   end
 
   test "returns execution failure when runtime is not prepared" do
@@ -67,7 +67,7 @@ defmodule Jido.Lib.Github.Actions.RunCodingAgentCodingTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:run_coding_agent_failed, :provider_runtime_not_ready}
+              message: "{:run_coding_agent_failed, :provider_runtime_not_ready}"
             }} = Jido.Exec.run(RunCodingAgent, params, %{})
   end
 end

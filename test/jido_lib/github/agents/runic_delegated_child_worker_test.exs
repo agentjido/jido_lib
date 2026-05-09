@@ -11,8 +11,9 @@ defmodule Jido.Lib.Github.Agents.RunicDelegatedChildWorkerTest do
        %{runnable: %{id: "r-1"}, runnable_id: "r-1", tag: :writer}}
 
     assert {:ok, ^agent,
-            {RunicDelegatedChildWorker.ExecuteAction, %{runnable: %{id: "r-1"}, runnable_id: "r-1", tag: :writer}, %{},
-             opts}} = RunicDelegatedChildWorker.on_before_cmd(agent, action)
+            {RunicDelegatedChildWorker.ExecuteAction,
+             %{runnable: %{id: "r-1"}, runnable_id: "r-1", tag: :writer}, %{}, opts}} =
+             RunicDelegatedChildWorker.on_before_cmd(agent, action)
 
     assert opts[:timeout] == 0
     assert opts[:max_retries] == 0

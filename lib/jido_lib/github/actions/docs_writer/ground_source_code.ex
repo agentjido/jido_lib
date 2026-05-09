@@ -62,21 +62,28 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.GroundSourceCode do
       # error message as "valid" content).
       cmd = "test -f #{escaped} && cat #{escaped} | head -n #{@max_lines}"
 
-      case GithubHelpers.run_in_dir(agent_mod, params.session_id, dir, cmd, timeout: 10_000) do
-        {:ok, text} when is_binary(text) and text != "" ->
-          # Extra safety: reject leaked shell error messages
-          trimmed = String.trim(text)
-
-          if String.starts_with?(trimmed, "cat:") or
-               String.contains?(trimmed, "No such file or directory") do
-            nil
-          else
-            text
-          end
-
-        _ ->
-          nil
-      end
+      read_source_text(agent_mod, params.session_id, dir, cmd)
     end)
+  end
+
+  defp read_source_text(agent_mod, session_id, dir, cmd) do
+    case GithubHelpers.run_in_dir(agent_mod, session_id, dir, cmd, timeout: 10_000) do
+      {:ok, text} when is_binary(text) and text != "" ->
+        reject_shell_error(text)
+
+      _ ->
+        nil
+    end
+  end
+
+  defp reject_shell_error(text) do
+    trimmed = String.trim(text)
+
+    if String.starts_with?(trimmed, "cat:") or
+         String.contains?(trimmed, "No such file or directory") do
+      nil
+    else
+      text
+    end
   end
 end

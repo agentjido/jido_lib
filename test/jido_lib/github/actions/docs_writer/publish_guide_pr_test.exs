@@ -88,6 +88,6 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePrTest do
     assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
              Jido.Exec.run(PublishGuidePr, params, %{})
 
-    assert match?({:docs_publish_guide_pr_failed, _}, message)
+    assert message == "{:docs_publish_guide_pr_failed, :missing_output_path}"
   end
 end

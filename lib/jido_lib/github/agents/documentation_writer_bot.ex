@@ -75,9 +75,7 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       to: :build_docs_brief
     )
     |> Workflow.add(
-      ActionNode.new(DocsWriter.EvaluateLivebookDraft, %{iteration: 1},
-        name: :eval_draft_v1
-      ),
+      ActionNode.new(DocsWriter.EvaluateLivebookDraft, %{iteration: 1}, name: :eval_draft_v1),
       to: :run_writer_pass_v1
     )
     |> Workflow.add(
@@ -97,9 +95,7 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBot do
       to: :decide_revision_v1
     )
     |> Workflow.add(
-      ActionNode.new(DocsWriter.EvaluateLivebookDraft, %{iteration: 2},
-        name: :eval_draft_v2
-      ),
+      ActionNode.new(DocsWriter.EvaluateLivebookDraft, %{iteration: 2}, name: :eval_draft_v2),
       to: :run_writer_pass_v2
     )
     |> Workflow.add(

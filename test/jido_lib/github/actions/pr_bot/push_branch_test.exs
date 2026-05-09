@@ -42,10 +42,10 @@ defmodule Jido.Lib.Github.Actions.PushBranchTest do
       shell_agent_mod: WrongRemoteShellAgent
     }
 
-    assert {:error,
-            %Jido.Action.Error.ExecutionFailureError{
-              message: {:push_branch_failed, {:remote_mismatch, _}}
-            }} = Jido.Exec.run(PushBranch, params, %{})
+    assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+             Jido.Exec.run(PushBranch, params, %{})
+
+    assert message =~ "{:push_branch_failed, {:remote_mismatch,"
   end
 
   test "fails when git push fails" do
@@ -62,7 +62,7 @@ defmodule Jido.Lib.Github.Actions.PushBranchTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:push_branch_failed, :permission_denied}
+              message: "{:push_branch_failed, :permission_denied}"
             }} = Jido.Exec.run(PushBranch, params, %{})
   end
 end

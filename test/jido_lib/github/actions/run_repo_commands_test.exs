@@ -59,10 +59,10 @@ defmodule Jido.Lib.Github.Actions.RunRepoCommandsTest do
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
-    assert {:error,
-            %Jido.Action.Error.ExecutionFailureError{
-              message: {:check_failed, "mix compile", :compile_failed, _results}
-            }} = Jido.Exec.run(RunRepoCommands, params, %{})
+    assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
+             Jido.Exec.run(RunRepoCommands, params, %{})
+
+    assert message =~ "{:check_failed, \"mix compile\", :compile_failed,"
   end
 
   test "infers checks phase from commit_sha when phase is omitted" do

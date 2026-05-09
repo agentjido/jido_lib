@@ -36,18 +36,19 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
   @impl true
   def run(params, _context) do
     if params.publish != true do
-      with {:ok, local_guide_path} <-
-             maybe_write_local_guide(params, params.output_path, params.final_guide) do
-        result =
-          DocsHelpers.pass_through(params)
-          |> Map.put(:published, false)
-          |> Map.put(:publish_requested, false)
-          |> maybe_put_local_guide_path(local_guide_path)
+      case maybe_write_local_guide(params, params.output_path, params.final_guide) do
+        {:ok, local_guide_path} ->
+          result =
+            DocsHelpers.pass_through(params)
+            |> Map.put(:published, false)
+            |> Map.put(:publish_requested, false)
+            |> maybe_put_local_guide_path(local_guide_path)
 
-        emit_docs_signal(result)
-        {:ok, result}
-      else
-        {:error, reason} -> {:error, {:docs_publish_guide_pr_failed, reason}}
+          emit_docs_signal(result)
+          {:ok, result}
+
+        {:error, reason} ->
+          {:error, {:docs_publish_guide_pr_failed, reason}}
       end
     else
       with {:ok, output_path} <- required_output_path(params.output_path),
@@ -83,12 +84,15 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PublishGuidePr do
   end
 
   defp required_output_path(path) do
-    with {:ok, sanitized} <- DocsHelpers.sanitize_output_path(path),
-         true <- is_binary(sanitized) and sanitized != "" do
-      {:ok, sanitized}
-    else
-      false -> {:error, :missing_output_path}
-      {:error, reason} -> {:error, reason}
+    case DocsHelpers.sanitize_output_path(path) do
+      {:ok, sanitized} when is_binary(sanitized) and sanitized != "" ->
+        {:ok, sanitized}
+
+      {:ok, _sanitized} ->
+        {:error, :missing_output_path}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

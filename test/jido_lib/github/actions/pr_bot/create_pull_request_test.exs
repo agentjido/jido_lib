@@ -86,7 +86,7 @@ defmodule Jido.Lib.Github.Actions.CreatePullRequestTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:create_pull_request_failed, :api_down}
+              message: "{:create_pull_request_failed, :api_down}"
             }} = Jido.Exec.run(CreatePullRequest, params, %{})
   end
 end

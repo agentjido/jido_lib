@@ -47,12 +47,10 @@ defmodule Jido.Lib.Github.Actions.ValidateRuntimeTest do
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent
     }
 
-    assert {:error,
-            %Jido.Action.Error.ExecutionFailureError{
-              message: {:validate_runtime_failed, %{missing: missing}}
-            }} =
+    assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
              Jido.Exec.run(ValidateRuntime, params, %{})
 
-    assert {:missing_tool, "claude"} in missing
+    assert message =~ "{:validate_runtime_failed,"
+    assert message =~ "missing_tool: \"claude\""
   end
 end

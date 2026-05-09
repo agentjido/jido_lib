@@ -17,7 +17,7 @@ defmodule Jido.Lib.Github.Actions.Release.AdditionalActionsTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:release_validate_env_failed, :missing_publish_credentials}
+              message: "{:release_validate_env_failed, :missing_publish_credentials}"
             }} =
              Jido.Exec.run(Release.ValidateReleaseEnv, params, %{})
   end
@@ -100,13 +100,11 @@ defmodule Jido.Lib.Github.Actions.Release.AdditionalActionsTest do
       publish: false
     }
 
-    assert {:error,
-            %Jido.Action.Error.ExecutionFailureError{
-              message: {:release_quality_gate_failed, %{status: status}}
-            }} =
+    assert {:error, %Jido.Action.Error.ExecutionFailureError{message: message}} =
              Jido.Exec.run(Release.RunQualityGate, params, %{})
 
-    assert status in [:failed, :error, :unknown]
+    assert message =~ "{:release_quality_gate_failed,"
+    assert message =~ "status: :unknown"
   end
 
   test "run_release_checks executes mix quality command" do
@@ -154,7 +152,7 @@ defmodule Jido.Lib.Github.Actions.Release.AdditionalActionsTest do
 
     assert {:error,
             %Jido.Action.Error.ExecutionFailureError{
-              message: {:release_publish_hex_failed, :missing_hex_api_key}
+              message: "{:release_publish_hex_failed, :missing_hex_api_key}"
             }} =
              Jido.Exec.run(Release.PublishHex, params, %{})
   end

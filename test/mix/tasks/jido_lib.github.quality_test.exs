@@ -3,6 +3,32 @@ defmodule Mix.Tasks.JidoLib.Github.QualityTest do
 
   alias Mix.Tasks.JidoLib.Github.Quality
 
+  defmodule FakeQualityBot do
+    def run_target(target, opts) do
+      %{
+        status: :completed,
+        bot: :quality,
+        run_id: "fake-quality-run",
+        target: target,
+        apply?: Keyword.fetch!(opts, :apply),
+        summary: %{total_rules: 0, passed: 0, failed: 0}
+      }
+    end
+  end
+
+  setup do
+    previous = Application.get_env(:jido_lib, :quality_bot_module)
+    Application.put_env(:jido_lib, :quality_bot_module, FakeQualityBot)
+
+    on_exit(fn ->
+      if is_nil(previous) do
+        Application.delete_env(:jido_lib, :quality_bot_module)
+      else
+        Application.put_env(:jido_lib, :quality_bot_module, previous)
+      end
+    end)
+  end
+
   test "build_publish_comment/1 returns nil without both repo and issue" do
     assert Quality.build_publish_comment([]) == nil
     assert Quality.build_publish_comment(publish_repo: "agentjido/jido_lib") == nil
@@ -33,6 +59,6 @@ defmodule Mix.Tasks.JidoLib.Github.QualityTest do
   test "run/1 allows report-only mode without --yes" do
     Mix.Task.reenable("jido_lib.github.quality")
 
-    assert is_map(Quality.run([".", "--no-apply"]))
+    assert %{apply?: false, status: :completed} = Quality.run([".", "--no-apply"])
   end
 end
