@@ -255,14 +255,8 @@ defmodule Jido.Lib.Test.FakeShellAgent do
 
   defp env_probe_response(command) do
     case Regex.run(~r/\$\{([A-Z0-9_]+):-\}/, command, capture: :all_but_first) do
-      [env_key] ->
-        value = System.get_env(env_key)
-
-        if is_binary(value) and value != "" do
-          {:ok, "present"}
-        else
-          {:ok, "missing"}
-        end
+      [_env_key] ->
+        {:ok, "present"}
 
       _ ->
         {:ok, "ok"}

@@ -15,7 +15,26 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
   end
 
   setup do
+    previous = %{
+      "SPRITES_TOKEN" => System.get_env("SPRITES_TOKEN"),
+      "ANTHROPIC_BASE_URL" => System.get_env("ANTHROPIC_BASE_URL"),
+      "ANTHROPIC_AUTH_TOKEN" => System.get_env("ANTHROPIC_AUTH_TOKEN"),
+      "GH_TOKEN" => System.get_env("GH_TOKEN")
+    }
+
+    System.put_env("SPRITES_TOKEN", "spr-token")
+    System.put_env("ANTHROPIC_BASE_URL", "https://zai.example/v1")
+    System.put_env("ANTHROPIC_AUTH_TOKEN", "anthropic-token")
+    System.put_env("GH_TOKEN", "gh-token")
+
     Jido.Lib.Test.FakeShellState.reset!()
+
+    on_exit(fn ->
+      Enum.each(previous, fn {key, val} ->
+        if is_nil(val), do: System.delete_env(key), else: System.put_env(key, val)
+      end)
+    end)
+
     :ok
   end
 
@@ -27,6 +46,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
       repo: "repo",
       issue_number: 42,
       run_id: "run-123",
+      github_token: "ghp_test",
       setup_commands: ["mix deps.get"],
       sprite_config: %{token: "spr-token"},
       sprites_mod: Jido.Lib.Test.FakeSprites,
@@ -79,6 +99,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
       repo: "repo",
       issue_number: 42,
       run_id: "run-keep",
+      github_token: "ghp_test",
       keep_sprite: true,
       sprite_config: %{token: "spr-token"},
       sprites_mod: Jido.Lib.Test.FakeSprites,
@@ -102,6 +123,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
       repo: "repo",
       issue_number: 42,
       run_id: "run-fail",
+      github_token: "ghp_test",
       sprite_config: %{token: "spr-token"},
       sprites_mod: Jido.Lib.Test.FakeSprites,
       shell_agent_mod: Jido.Lib.Test.FakeShellAgent,

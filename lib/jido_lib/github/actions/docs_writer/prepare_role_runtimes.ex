@@ -18,8 +18,8 @@ defmodule Jido.Lib.Github.Actions.DocsWriter.PrepareRoleRuntimes do
     ]
 
   alias Jido.Harness.Exec
-  alias Jido.Lib.Github.Actions.ValidateHostEnv
   alias Jido.Lib.Github.Actions.DocsWriter.Helpers, as: DocsHelpers
+  alias Jido.Lib.Github.Actions.ValidateHostEnv
 
   @impl true
   def run(params, _context) do
