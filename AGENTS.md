@@ -35,3 +35,7 @@ Shell backend abstractions belong in `jido_shell`.
 
 Canonical workflow documentation lives at:
 - `docs/github_issue_triage_workflow.md`
+
+## Release Hygiene
+
+- Do not modify `CHANGELOG.md`; release notes are generated from Git history during release, so keep changes focused on proper Conventional Commits.
