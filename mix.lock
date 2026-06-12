@@ -51,7 +51,7 @@
   "jido_ai": {:git, "https://github.com/agentjido/jido_ai.git", "7a029c280dc621b728561c6aad282c2eef6872e6", [branch: "main"]},
   "jido_amp": {:git, "https://github.com/agentjido/jido_amp.git", "c4986757914231e33fe1788683ea6cf03d6e0eed", [branch: "main"]},
   "jido_claude": {:git, "https://github.com/agentjido/jido_claude.git", "fcae3de041478fb87f43bf8ac6ca6986be46b8de", [branch: "main"]},
-  "jido_codex": {:git, "https://github.com/agentjido/jido_codex.git", "0ca8e7248af26a4bdefe3dbc8313a1d72f2626ea", [branch: "main"]},
+  "jido_codex": {:git, "https://github.com/agentjido/jido_codex.git", "90114213d02bc304f23a11a678f328da3c1f7385", [branch: "main"]},
   "jido_gemini": {:git, "https://github.com/agentjido/jido_gemini.git", "4080ace9d6966a5c8cad1ab0d10a1b70aacbe4f0", [branch: "main"]},
   "jido_harness": {:git, "https://github.com/agentjido/jido_harness.git", "6d726378338e625ef2df8981eaad52d634c45a81", [branch: "main"]},
   "jido_runic": {:git, "https://github.com/agentjido/jido_runic.git", "504ac094f6eb7c17fde886d888826ccbc4943678", [branch: "main"]},
