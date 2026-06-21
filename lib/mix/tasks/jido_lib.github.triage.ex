@@ -37,7 +37,7 @@ defmodule Mix.Tasks.JidoLib.Github.Triage do
 
     case Jido.start([]) do
       {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
+      {:error, reason} -> Mix.raise("Unable to start Jido runtime: #{inspect(reason)}")
     end
 
     {opts, args, _} =
