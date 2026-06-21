@@ -3,18 +3,12 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
 
   alias Jido.Lib.Github.Agents.IssueTriageBot
 
-  setup_all do
-    {:ok, _} = Application.ensure_all_started(:jido)
-
-    case Jido.start([]) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
-
-    :ok
-  end
+  @jido Jido.IssueTriageTest
 
   setup do
+    {:ok, _} = Application.ensure_all_started(:jido)
+    start_supervised!({Jido, name: @jido})
+
     previous = %{
       "SPRITES_TOKEN" => System.get_env("SPRITES_TOKEN"),
       "ANTHROPIC_BASE_URL" => System.get_env("ANTHROPIC_BASE_URL"),
@@ -54,7 +48,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
       shell_session_mod: Jido.Lib.Test.FakeShellSession
     }
 
-    assert {:ok, result} = IssueTriageBot.run(intake, jido: Jido.Default, timeout: 30_000)
+    assert {:ok, result} = IssueTriageBot.run(intake, jido: @jido, timeout: 30_000)
     assert result.status == :completed
     assert result.provider == :claude
     assert result.investigation_status == :ok
@@ -107,7 +101,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
       shell_session_mod: Jido.Lib.Test.FakeShellSession
     }
 
-    assert {:ok, result} = IssueTriageBot.run(intake, jido: Jido.Default, timeout: 30_000)
+    assert {:ok, result} = IssueTriageBot.run(intake, jido: @jido, timeout: 30_000)
 
     assert result.status == :completed
     assert result.message =~ "Sprite preserved"
@@ -131,7 +125,7 @@ defmodule Jido.Lib.Github.Agents.IssueTriageTest do
     }
 
     assert {:error, {:pipeline_failed, failures}} =
-             IssueTriageBot.run(intake, jido: Jido.Default, timeout: 30_000)
+             IssueTriageBot.run(intake, jido: @jido, timeout: 30_000)
 
     assert Enum.any?(failures, fn failure ->
              failure[:status] == :failed and failure[:node] == :fetch_issue

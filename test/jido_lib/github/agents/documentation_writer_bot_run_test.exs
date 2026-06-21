@@ -8,7 +8,7 @@ defmodule Jido.Lib.Github.Agents.DocumentationWriterBotRunTest do
 
     case Jido.start(name: Jido.DocumentationWriterBotRunTest) do
       {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
+      {:error, reason} -> raise "Unable to start Jido runtime: #{inspect(reason)}"
     end
 
     :ok

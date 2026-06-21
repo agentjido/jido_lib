@@ -121,7 +121,6 @@ defmodule Mix.Tasks.JidoLib.Github.Roadmap do
   defp ensure_jido_started! do
     case Jido.start([]) do
       {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
       {:error, reason} -> Mix.raise("Unable to start Jido runtime: #{inspect(reason)}")
     end
   end

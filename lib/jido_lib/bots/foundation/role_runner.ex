@@ -295,8 +295,6 @@ defmodule Jido.Lib.Bots.Foundation.RoleRunner do
     |> normalize_text()
   end
 
-  defp content_text(_), do: nil
-
   defp content_part_text(%{} = part) do
     case map_get(part, :type) do
       "text" -> normalized_part_text(part)

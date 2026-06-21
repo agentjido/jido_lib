@@ -1,8 +1,6 @@
 defmodule Jido.Lib.Github.Helpers do
   @moduledoc false
 
-  require Logger
-
   alias Jido.Shell.Exec
 
   @issue_url_pattern ~r{github\.com/([^/]+)/([^/]+)/issues/(\d+)}

@@ -461,10 +461,15 @@ defmodule Jido.Lib.Github.AgentRuntime do
   end
 
   defp duration_ms(measurements) when is_map(measurements) do
-    case measurements[:duration] || measurements["duration"] do
-      native when is_integer(native) -> System.convert_time_unit(native, :native, :millisecond)
-      value when is_integer(value) -> value
-      _ -> 0
+    cond do
+      is_integer(measurements[:duration]) ->
+        System.convert_time_unit(measurements[:duration], :native, :millisecond)
+
+      is_integer(measurements["duration"]) ->
+        measurements["duration"]
+
+      true ->
+        0
     end
   end
 end
